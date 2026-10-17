@@ -14,7 +14,7 @@ app.get("/api/health", (_req, res) => {
 
 if (existsSync(webRoot)) {
   app.use(express.static(webRoot, { index: false, maxAge: process.env.NODE_ENV === "production" ? "1h" : 0 }));
-  app.get("*", (_req, res) => res.sendFile(resolve(webRoot, "index.html")));
+  app.get("/{*path}", (_req, res) => res.sendFile(resolve(webRoot, "index.html")));
 } else {
   app.get("/", (_req, res) => res.type("text").send("Blorrl API is running. Start the Vite editor with npm run dev:web."));
 }
