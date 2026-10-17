@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { Play, Hammer, Plus, Trash2, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
-import { compile, runProgram, type Block, type BlockKind } from "./language";
+import { Play, Hammer, Plus, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
+import { compile, compileC, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 
 const initialBlocks: Block[] = [
   { id: "b1", kind: "print", value: '"Hello from Blorrl!"' },
-  { id: "b2", kind: "let", name: "answer", value: "40 + 2" },
+  { id: "b2", kind: "let", name: "answer", value: "40 + 2", types: ["number"] },
   { id: "b3", kind: "print", value: "answer" },
 ];
 const catalog: { kind: BlockKind; label: string; hint: string }[] = [
@@ -31,6 +31,8 @@ export default function App() {
   const [marquee, setMarquee] = useState<{x:number;y:number;w:number;h:number}|null>(null);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
+  const [spaceDown, setSpaceDown] = useState(false);
+  const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);
   const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
   const positionsRef = useRef(positions);
@@ -38,7 +40,25 @@ export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const marqueeStart = useRef<{x:number;y:number}|null>(null);
   const compiled = useMemo(() => compile(blocks), [blocks]);
+  const cCompiled = useMemo(() => compileC(blocks), [blocks]);
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
+  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
+  const totalBlocks = allBlocks(blocks).length;
+
+  useEffect(() => {
+    const down = (event: globalThis.KeyboardEvent) => {
+      if (event.code === "Space" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) { setSpaceDown(true); event.preventDefault(); }
+      if ((event.key === "Delete" || event.key === "Backspace") && selected.length && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+        event.preventDefault();
+        const remove = (items: Block[]): Block[] => items.filter(b => !selected.includes(b.id)).map(b => ({...b,children:remove(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:remove(br.children)})),elseChildren:b.elseChildren?remove(b.elseChildren):undefined}));
+        setBlocks(current=>remove(current));setSelected([]);setStatus("idle");
+      }
+    };
+    const up = (event: globalThis.KeyboardEvent) => {if(event.code==="Space")setSpaceDown(false);};
+    const blur = () => setSpaceDown(false);
+    window.addEventListener("keydown",down);window.addEventListener("keyup",up);window.addEventListener("blur",blur);
+    return ()=>{window.removeEventListener("keydown",down);window.removeEventListener("keyup",up);window.removeEventListener("blur",blur);};
+  }, [selected]);
 
   useEffect(() => {
     const handleResizeMove = (event: PointerEvent) => {
@@ -57,6 +77,8 @@ export default function App() {
     };
   }, []);
 
+
+
   useEffect(() => {
     let active = true;
     fetch("/server/api/health").then(r => { if (!r.ok) throw new Error("offline"); return r.json(); })
@@ -66,11 +88,19 @@ export default function App() {
   }, []);
 
   function updateBlock(id: string, patch: Partial<Block>) {
-    setBlocks(current => current.map(block => block.id === id ? { ...block, ...patch } as Block : block));
-    setStatus("idle");
+    const update = (items: Block[]): Block[] => items.map(block => block.id === id ? {...block,...patch} : ({
+      ...block, children:update(block.children ?? []),
+      elseIf:block.elseIf?.map(branch=>({...branch,children:update(branch.children)})),
+      elseChildren:block.elseChildren ? update(block.elseChildren) : undefined,
+    }));
+    setBlocks(update); setStatus("idle");
   }
   function makeBlock(kind: BlockKind): Block {
-    return { id: crypto.randomUUID(), kind, value: kind === "print" ? '"Hello!"' : kind === "input" ? "value" : kind === "if" ? "true" : "1", name: "value" } as Block;
+    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? '"Hello!"' : kind==="if" ? "true" : "1"};
+    if (kind==="let" || kind==="input") {block.name="value";block.types=["number"];}
+    if (kind==="add") {block.right="1";block.operator="+";}
+    if (kind==="if" || kind==="repeat") block.children=[];
+    return block;
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
     const block = makeBlock(kind);
@@ -82,6 +112,51 @@ export default function App() {
       return index < 0 ? [...current, block] : [...current.slice(0, index), block, ...current.slice(index)];
     });
     setSelected([block.id]); setStatus("idle");
+  }
+  function removeIds(items: Block[], ids: string[]): Block[] {
+    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
+  }
+  function insertNested(targetId: string, child: Block) {
+    const insert = (items: Block[]): Block[] => items.map(b => {
+      if (b.id === targetId && (b.kind === "if" || b.kind === "repeat")) return {...b,children:[...(b.children??[]),child]};
+      const elseIf = (b.elseIf??[]).map(br => br.id===targetId ? {...br,children:[...br.children,child]} : {...br,children:insert(br.children)});
+      const elseChildren = b.elseId===targetId ? [...(b.elseChildren??[]),child] : b.elseChildren ? insert(b.elseChildren) : undefined;
+      return {...b,children:insert(b.children??[]),elseIf:b.elseIf?elseIf:undefined,elseChildren};
+    });
+    setBlocks(insert);setSelected([child.id]);setStatus("idle");
+  }
+  function nestBlocks(targetId: string, ids: string[]) {
+    if (ids.includes(targetId)) return;
+    setBlocks(current => {
+      const moving=allBlocks(current).filter(b=>ids.includes(b.id));
+      const rest=removeIds(current,ids);
+      const insert=(items:Block[]):Block[]=>items.map(b=>{
+        if(b.id===targetId&&(b.kind==="if"||b.kind==="repeat"))return {...b,children:[...(b.children??[]),...moving]};
+        const branches=(b.elseIf??[]).map(br=>br.id===targetId?{...br,children:[...br.children,...moving]}:{...br,children:insert(br.children)});
+        const els=b.elseId===targetId?[...(b.elseChildren??[]),...moving]:b.elseChildren?insert(b.elseChildren):undefined;
+        return {...b,children:insert(b.children??[]),elseIf:b.elseIf?branches:undefined,elseChildren:els};
+      });
+      return insert(rest);
+    });
+    setPositions(current=>{const next={...current};ids.forEach(id=>delete next[id]);return next;});setStatus("idle");
+  }
+  function updateType(id: string, type: ValueType, checked: boolean) {
+    const block = allBlocks(blocks).find(b => b.id === id);
+    if (!block) return;
+    const types = block.types ?? ["number"];
+    updateBlock(id, {types: checked ? [...new Set([...types, type])] : types.filter(t => t !== type)});
+  }
+  function addElseIf(id: string) {
+    const update = (items: Block[]): Block[] => items.map(b => ({...b,elseIf:b.id===id?[...(b.elseIf??[]),{id:crypto.randomUUID(),condition:"false",children:[]}]:b.elseIf,children:update(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:update(br.children)})),elseChildren:b.elseChildren?update(b.elseChildren):undefined}));
+    setBlocks(update); setStatus("idle");
+  }
+  function toggleElse(id: string) {
+    const block = allBlocks(blocks).find(b=>b.id===id);
+    updateBlock(id,{elseChildren:block?.elseChildren ? undefined : [],elseId:block?.elseChildren ? undefined : crypto.randomUUID()});
+  }
+  function updateBranch(id: string, branchId: string, condition: string) {
+    const update = (items: Block[]): Block[] => items.map(b=>({...b,elseIf:b.elseIf?.map(br=>br.id===branchId?{...br,condition:condition}: {...br,children:update(br.children)}),children:update(b.children??[]),elseChildren:b.elseChildren?update(b.elseChildren):undefined}));
+    setBlocks(update); setStatus("idle");
   }
   function moveSelection(ids: string[], targetId?: string) {
     setBlocks(current => {
@@ -95,7 +170,7 @@ export default function App() {
     setStatus("idle");
   }
   function onDragStart(event: DragEvent, payload: DragPayload) {
-    if ((event.target as HTMLElement).closest("input,button")) { event.preventDefault(); return; }
+    if (spaceDown || (payload.source === "canvas" && (event.target as HTMLElement).closest("input,button"))) { event.preventDefault(); return; }
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "canvas") {
@@ -138,39 +213,46 @@ export default function App() {
     setStatus("idle");
   }
   function onDrop(event: DragEvent, targetId?: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const raw = event.dataTransfer.getData("application/x-blorrl");
-    if (!raw) return;
+    event.preventDefault(); event.stopPropagation();
+    const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw)return;
     try {
-      const payload = JSON.parse(raw) as DragPayload;
-      if (payload.source === "library") { const rect = canvasRef.current?.getBoundingClientRect(); const point = rect && canvasRef.current ? {x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)} : undefined; addBlock(payload.kind, targetId, point); }
-      else moveSelection(payload.ids, targetId);
+      const payload=JSON.parse(raw) as DragPayload;
+      const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
+      const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
+      if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
+        if(payload.source==="library") insertNested(targetId,makeBlock(payload.kind));
+        else nestBlocks(targetId,payload.ids);
+      } else if(payload.source==="library") {
+        const rect=canvasRef.current?.getBoundingClientRect();
+        const point=rect&&canvasRef.current?{x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)}:undefined;
+        addBlock(payload.kind, targetId, point);
+      } else moveSelection(payload.ids,targetId);
     } catch { /* Ignore invalid drag payloads. */ }
   }
   function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
-    if ((event.target as HTMLElement).closest(".block-card,button,input,textarea,.start-node")) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    marqueeStart.current = point;
-    setMarquee({ ...point, w: 0, h: 0 });
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (spaceDown || event.button===1) {
+      panOrigin.current={x:event.clientX,y:event.clientY,left:event.currentTarget.scrollLeft,top:event.currentTarget.scrollTop};
+      event.currentTarget.setPointerCapture(event.pointerId);event.preventDefault();return;
+    }
+    if ((event.target as HTMLElement).closest(".block-card,button,input,textarea,select,.start-node")) return;
+    const rect=event.currentTarget.getBoundingClientRect();
+    const point={x:event.clientX-rect.left+event.currentTarget.scrollLeft,y:event.clientY-rect.top+event.currentTarget.scrollTop};
+    marqueeStart.current=point;setMarquee({...point,w:0,h:0});event.currentTarget.setPointerCapture(event.pointerId);
   }
-  function moveMarquee(event: PointerEvent<HTMLDivElement>) {
-    if (!marqueeStart.current || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left, y = event.clientY - rect.top;
-    const start = marqueeStart.current;
-    const box = { x: Math.min(start.x,x), y: Math.min(start.y,y), w: Math.abs(x-start.x), h: Math.abs(y-start.y) };
-    setMarquee(box);
-    const next = Array.from(canvasRef.current.querySelectorAll<HTMLElement>("[data-block-id]")).filter(el => {
-      const r = el.getBoundingClientRect();
-      const left = r.left - rect.left, top = r.top - rect.top;
-      return left < box.x + box.w && left + r.width > box.x && top < box.y + box.h && top + r.height > box.y;
-    }).map(el => el.dataset.blockId!).filter(Boolean);
-    setSelected(next);
+  function moveMarquee(event: ReactPointerEvent<HTMLDivElement>) {
+    const canvas=canvasRef.current;if(!canvas)return;
+    if(panOrigin.current){canvas.scrollLeft=panOrigin.current.left-(event.clientX-panOrigin.current.x);canvas.scrollTop=panOrigin.current.top-(event.clientY-panOrigin.current.y);return;}
+    if(!marqueeStart.current)return;
+    const rect=canvas.getBoundingClientRect();
+    const x=event.clientX-rect.left+canvas.scrollLeft,y=event.clientY-rect.top+canvas.scrollTop,start=marqueeStart.current;
+    const box={x:Math.min(start.x,x),y:Math.min(start.y,y),w:Math.abs(x-start.x),h:Math.abs(y-start.y)};setMarquee(box);
+    const ids=Array.from(canvas.querySelectorAll<HTMLElement>("[data-block-id]")).filter(el=>{
+      const r=el.getBoundingClientRect(),left=r.left-rect.left+canvas.scrollLeft,top=r.top-rect.top+canvas.scrollTop;
+      return left<box.x+box.w&&left+r.width>box.x&&top<box.y+box.h&&top+r.height>box.y;
+    }).map(el=>el.dataset.blockId!).filter(Boolean);
+    setSelected(ids);
   }
-  function endMarquee() { marqueeStart.current = null; setMarquee(null); }
+  function endMarquee() { marqueeStart.current=null;panOrigin.current=null;setMarquee(null); }
   function selectBlock(event: MouseEvent, id: string) {
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
       setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
@@ -179,7 +261,7 @@ export default function App() {
   function run() {
     setBusy(true);
     try {
-      const result = runProgram(compiled, stdin);
+      const result = runProgram(compiled, stdin, blocks);
       setOutput(result.error || result.output || "(no output)");
       setStatus(result.error ? "error" : "ran");
     } catch (error) { setOutput(error instanceof Error ? error.message : String(error)); setStatus("error"); }
@@ -188,6 +270,18 @@ export default function App() {
   function build() {
     setOutput(compiled.errors.length ? compiled.errors.join("\n") : compiled.code);
     setStatus(compiled.errors.length ? "error" : "built");
+  }
+  async function downloadBuild(target: "assembly" | "exe") {
+    setBusy(true);
+    try {
+      if (cCompiled.errors.length) throw new Error(cCompiled.errors.join("\n"));
+      const response = await fetch("/server/api/build/" + target, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:cCompiled.code})});
+      if (!response.ok) throw new Error(await response.text());
+      const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download=target==="exe"?"main.exe":"main.s";a.click();URL.revokeObjectURL(url);
+      setOutput(target==="exe"?"Windows executable downloaded.":"Windows x64 assembly downloaded.");setStatus("built");
+    } catch(error) {setOutput(error instanceof Error?error.message:String(error));setStatus("error");}
+    finally {setBusy(false);}
   }
   function exportSource() {
     const blob = new Blob([compiled.code], { type: "text/plain" });
@@ -199,7 +293,7 @@ export default function App() {
     <header className="topbar">
       <a className="brand" href="#"><span className="brand-mark"><Blocks size={18}/></span><span>blorrl<span className="brand-dot">.</span></span><span className="studio-tag">STUDIO</span></a>
       <div className="top-meta"><span className="live-dot"/><span>WORKSPACE</span><span className="version">develop / main.blorr</span></div>
-      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Build</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
+      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Source</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("assembly")}><Download size={13}/> .s</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
     <section className="workspace" style={{height: `calc(${workspaceRatio}vh - ${76 * workspaceRatio / 100}px)`}}>
       <aside className="sidebar">
@@ -211,42 +305,52 @@ export default function App() {
         <div className="catalog-list">
           {visibleCatalog.map(item => <button key={item.kind} className="catalog-item" draggable onDragStart={e => onDragStart(e,{source:"library",kind:item.kind})} onClick={() => addBlock(item.kind)} title="Click to add or drag into the workspace"><span className={"catalog-icon " + item.kind}><Plus size={14}/></span><span className="catalog-copy"><strong>{item.label}</strong><small>{item.hint}</small></span><GripVertical size={14} className="catalog-grip"/></button>)}
         </div>
-        <div className="sidebar-bottom"><div className="sidebar-section-label">OUTLINE</div><div className="outline-row"><GitBranch size={13}/><span>main</span><span className="outline-count">{blocks.length}</span></div><div className="sidebar-note">Drag blocks to connect the flow. Select multiple blocks with Shift/Ctrl or by dragging over empty canvas.</div></div>
+        <div className="sidebar-bottom"><div className="sidebar-section-label">OUTLINE</div><div className="outline-row"><GitBranch size={13}/><span>main</span><span className="outline-count">{blocks.length}</span></div><div className="sidebar-note">Space + drag pans. Drag empty space to select; drag blocks to move them. Delete/Backspace removes selection.</div></div>
       </aside>
       <section className="editor">
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span><button className="icon-button tab-export" title="Export source" onClick={exportSource}><Download size={15}/></button></div>
-        <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{blocks.length} blocks</span></div>
+        <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span><button className="icon-button" title="Export source" onClick={exportSource}><Download size={15}/></button></div></div>
-        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Drag a block onto another to insert it before that block. Drag from the library into the flow to add it. Click to select, Shift/Ctrl-click to add or remove blocks, or drag over empty canvas to marquee-select. Dragging a selected block moves the selection as a group. Use Build to inspect generated source or Run to execute it.</p><code>print "hello";</code></div>}
-        <div className="block-canvas" ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
-          <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>DRAG TO REORDER / CONNECT</span></div>
+        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag empty space to select blocks. Drag blocks to move them or drop them into a control block to nest them. Delete/Backspace removes selected blocks. Add else-if/else branches from an if block.</p><code>print "hello";</code></div>}
+        <div className={"block-canvas " + (spaceDown ? "space-pan" : "")} ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
+          <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG EMPTY SPACE TO SELECT"}</span></div>
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
-                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label></>}
-                  {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><span className="field-hint">Reads one line from terminal input</span></>}
+                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><div className="type-picker"><span>ALLOWED TYPES</span>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)} onClick={e=>e.stopPropagation()}/>{type}</label>)}</div></>}
+                  {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><div className="type-picker"><span>ALLOWED TYPES</span>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)} onClick={e=>e.stopPropagation()}/>{type}</label>)}</div><span className="field-hint">Reads one line from terminal input</span></>}
                   {block.kind === "print" && <label className="wide-field">EXPRESSION<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "if" && <label className="wide-field">CONDITION<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "repeat" && <label>COUNT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
-                  {block.kind === "add" && <><label>LEFT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>RIGHT<input value={block.right ?? "1"} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></label></>}
+                  {block.kind === "add" && <div className="operator-fields"><input aria-label="Left operand" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /><select aria-label="Operator" value={block.operator ?? "+"} onChange={e=>updateBlock(block.id,{operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}><option>+</option><option>-</option><option>*</option><option>/</option></select><input aria-label="Right operand" value={block.right ?? "1"} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></div>}
                 </div>
+                {(block.kind === "if" || block.kind === "repeat") && <div className="nested-flow" data-drop-into={block.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,block.id)}>
+                  <div className="nested-label">{block.kind === "if" ? "THEN" : "REPEAT BODY"} <span>DROP BLOCKS HERE</span></div>
+                  {(block.children ?? []).map((child,i)=><div className="nested-item" key={child.id} data-block-id={child.id} data-drop-into={child.kind==="if"||child.kind==="repeat"?child.id:undefined} draggable onDragOver={e=>e.preventDefault()} onDrop={e=>{e.stopPropagation();onDrop(e,child.id);}} onClick={e=>{e.stopPropagation();selectBlock(e as unknown as MouseEvent,child.id);}} onDragStart={e=>onDragStart(e,{source:"canvas",ids:selected.includes(child.id)?selected:[child.id]})} onDragEnd={e=>onBlockDragEnd(e,child.id)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.stopPropagation();onDrop(e,child.id);}}>
+                    <span className="nested-grip"><GripVertical size={12}/></span><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong>{(child.kind==="let"||child.kind==="input")&&<input aria-label="Nested variable name" value={child.name??""} onChange={e=>updateBlock(child.id,{name:e.target.value})} onClick={e=>e.stopPropagation()}/>}<input className="nested-expression" aria-label="Nested block value" value={child.value} onChange={e=>updateBlock(child.id,{value:e.target.value})} onClick={e=>e.stopPropagation()}/>
+                  </div>)}
+                  {!(block.children ?? []).length && <div className="nested-empty">Drop blocks into this area</div>}
+                  {block.kind === "if" && (block.elseIf ?? []).map(branch=><div className="branch-panel" key={branch.id} data-drop-into={branch.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,branch.id)}><label className="branch-heading">ELSE IF <input value={branch.condition} onChange={e=>updateBranch(block.id,branch.id,e.target.value)} onClick={e=>e.stopPropagation()}/></label><div className="nested-label">BRANCH BODY</div>{branch.children.map(child=><div className="nested-item" key={child.id}><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong><span className="nested-value">{child.value}</span></div>)}</div>)}
+                  {block.kind === "if" && block.elseChildren && <div className="branch-panel" data-drop-into={block.elseId} onDragOver={e=>e.preventDefault()} onDrop={e=>block.elseId&&onDrop(e,block.elseId)}><div className="branch-heading">ELSE</div>{block.elseChildren.map(child=><div className="nested-item" key={child.id}><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong><span className="nested-value">{child.value}</span></div>)}</div>}
+                  {block.kind === "if" && <div className="branch-actions"><button onClick={e=>{e.stopPropagation();addElseIf(block.id)}}><Plus size={11}/> Else if</button><button onClick={e=>{e.stopPropagation();toggleElse(block.id)}}><Plus size={11}/> Else</button></div>}
+                </div>}
               </div>
-              <button className="delete-block" title="Remove block" onClick={e=>{e.stopPropagation();setBlocks(current=>current.filter(b=>b.id!==block.id));setSelected(current=>current.filter(id=>id!==block.id));setPositions(current=>{const next={...current};delete next[block.id];return next;});setStatus("idle");}}><Trash2 size={14}/></button>
             </article>)}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           {marquee && <div className="selection-marquee" style={{left:marquee.x,top:marquee.y,width:marquee.w,height:marquee.h}}/>}
         </div>
-        <div className="editor-footer"><span><span className="footer-dot"/> {selected.length} selected <span className="footer-separator">·</span> {blocks.length} blocks in flow</span><span>SHIFT / CTRL TO MULTI-SELECT</span></div>
+        <div className="editor-footer"><span><span className="footer-dot"/> {selected.length} selected <span className="footer-separator">·</span> {totalBlocks} blocks in flow</span><span>SPACE + DRAG TO PAN · DELETE TO REMOVE</span></div>
       </section>
     </section>
-    <div className="pane-resizer" role="separator" aria-label="Resize workspace and terminal" onPointerDown={e=>{resizeOrigin.current={y:e.clientY,ratio:workspaceRatio};document.body.classList.add("resizing-pane");}}><span/><span/><span/></div>\n    <section className="terminal">
+    <div className="pane-resizer" role="separator" aria-label="Resize workspace and terminal" onPointerDown={e=>{resizeOrigin.current={y:e.clientY,ratio:workspaceRatio};document.body.classList.add("resizing-pane");}}><span/><span/><span/></div>
+    <section className="terminal">
       <div className="terminal-top"><div className="terminal-title"><Terminal size={15}/><strong>TERMINAL</strong><span className="terminal-divider">/</span><span>OUTPUT</span></div><div className="terminal-status"><span className={"status-dot " + status}/>{status==="ran"?"EXECUTED":status==="built"?"BUILD SUCCESS":status==="error"?"ERROR":"IDLE"}<button className="clear-button" onClick={()=>{setOutput("");setStatus("idle");}}>Clear</button></div></div>
       <div className="terminal-body"><div className="terminal-input"><label htmlFor="stdin">STDIN</label><textarea id="stdin" value={stdin} onChange={e=>setStdin(e.target.value)} placeholder="Type input here… (one line per read)" rows={2}/><span>INPUT BUFFER</span></div><div className="terminal-output"><div className="output-label"><span>STDOUT / STDERR</span><span>UTF-8</span></div><pre className={status==="error"?"error-text":""}>{output}</pre></div></div>
-      <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> BROWSER SANDBOX</span><span>COMPILE <b>·</b> {compiled.errors.length?"ERRORS":"INSTANT"}</span></div>
+      <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> NATIVE BUILD VIA ZIG</span><span>COMPILE <b>·</b> {compiled.errors.length || cCompiled.errors.length ? "ERRORS" : "INSTANT"}</span></div>
     </section>
     <footer className="statusbar"><span><span className="status-light"/> {serverOnline === false ? "Server connection unavailable" : "Ready"} <span className="statusbar-path">/ main.blorr</span></span><span>UTF-8 <b>·</b> TYPESCRIPT <b>·</b> <ChevronDown size={12}/></span></footer>
   </main>;
