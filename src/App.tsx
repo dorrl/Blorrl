@@ -41,6 +41,23 @@ export default function App() {
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
+    const handleResizeMove = (event: globalThis.PointerEvent) => {
+      const origin = resizeOrigin.current;
+      if (!origin) return;
+      setWorkspaceRatio(Math.max(30, Math.min(85, origin.ratio + (event.clientY - origin.y) / Math.max(1, window.innerHeight) * 100)));
+    };
+    const handleResizeEnd = () => { resizeOrigin.current = null; document.body.classList.remove("resizing-pane"); };
+    window.addEventListener("pointermove", handleResizeMove);
+    window.addEventListener("pointerup", handleResizeEnd);
+    window.addEventListener("pointercancel", handleResizeEnd);
+    return () => {
+      window.removeEventListener("pointermove", handleResizeMove);
+      window.removeEventListener("pointerup", handleResizeEnd);
+      window.removeEventListener("pointercancel", handleResizeEnd);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     fetch("/server/api/health").then(r => { if (!r.ok) throw new Error("offline"); return r.json(); })
       .then(() => { if (active) setServerOnline(true); })
@@ -57,6 +74,8 @@ export default function App() {
   }
   function addBlock(kind: BlockKind, beforeId?: string) {
     const block = makeBlock(kind);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    setPositions(current => ({...current,[block.id]:{x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:100 + blocks.length*18}}));
     setBlocks(current => {
       if (!beforeId) return [...current, block];
       const index = current.findIndex(item => item.id === beforeId);
@@ -78,6 +97,44 @@ export default function App() {
   function onDragStart(event: DragEvent, payload: DragPayload) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
+    if (payload.source === "canvas") {
+      const ids = selected.includes(payload.ids[0]) ? selected : payload.ids;
+      const origins: Record<string,{x:number;y:number}> = {};
+      ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:104 + blocks.findIndex(b=>b.id===id)*104}; });
+      dragOrigin.current = {x:event.clientX,y:event.clientY,ids,origins};
+    }
+  }
+  function onBlockDragEnd(event: DragEvent, id: string) {
+    const drag = dragOrigin.current;
+    if (!drag) return;
+    dragOrigin.current = null;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    const next: Record<string,{x:number;y:number}> = {...positionsRef.current};
+    drag.ids.forEach(item => { const p=drag.origins[item]; next[item]={x:Math.max(12,p.x+dx),y:Math.max(64,p.y+dy)}; });
+    const canvas = canvasRef.current;
+    const target = canvas ? Array.from(canvas.querySelectorAll<HTMLElement>("[data-block-id]")).filter(el => !drag.ids.includes(el.dataset.blockId ?? "")).map(el => {
+      const targetId=el.dataset.blockId!; const p=next[targetId] ?? {x:42,y:104}; const r=el.getBoundingClientRect();
+      return {id:targetId,p,dist:Math.hypot(event.clientX-(r.left+r.width/2),event.clientY-r.bottom)};
+    }).filter(item=>item.dist<70).sort((a,b)=>a.dist-b.dist)[0] : undefined;
+    const startNode = canvas?.querySelector<HTMLElement>(".start-node");
+    const startRect = startNode?.getBoundingClientRect();
+    const startTarget = startRect ? {id:"__start",p:{x:startNode!.offsetLeft,y:startNode!.offsetTop},dist:Math.hypot(event.clientX-(startRect.left+startRect.width/2),event.clientY-startRect.bottom)} : undefined;
+    const snapToStart = startTarget && startTarget.dist < 70 && (!target || startTarget.dist < target.dist);
+    const snapped = snapToStart ? startTarget : target;
+    if (snapped) {
+      setBlocks(current => {
+        const moving=current.filter(b=>drag.ids.includes(b.id));
+        const rest=current.filter(b=>!drag.ids.includes(b.id));
+        const i=snapped.id==="__start" ? -1 : rest.findIndex(b=>b.id===snapped.id);
+        rest.splice(snapped.id==="__start" ? 0 : i<0 ? rest.length : i+1,0,...moving);
+        return rest;
+      });
+      const targetEl = snapped.id==="__start" ? startNode : canvas?.querySelector<HTMLElement>(`[data-block-id="${snapped.id}"]`);
+      let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 8;
+      drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-8; });
+    }
+    setPositions(next);
+    setStatus("idle");
   }
   function onDrop(event: DragEvent, targetId?: string) {
     event.preventDefault();
@@ -177,7 +234,7 @@ export default function App() {
                   {block.kind === "add" && <><label>LEFT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>RIGHT<input value={block.right ?? "1"} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></label></>}
                 </div>
               </div>
-              <button className="delete-block" title="Remove block" onClick={e=>{e.stopPropagation();setBlocks(current=>current.filter(b=>b.id!==block.id));setSelected(current=>current.filter(id=>id!==block.id));setStatus("idle");}}><Trash2 size={14}/></button>
+              <button className="delete-block" title="Remove block" onClick={e=>{e.stopPropagation();setBlocks(current=>current.filter(b=>b.id!==block.id));setSelected(current=>current.filter(id=>id!==block.id));setPositions(current=>{const next={...current};delete next[block.id];return next;});setStatus("idle");}}><Trash2 size={14}/></button>
             </article>)}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           {marquee && <div className="selection-marquee" style={{left:marquee.x,top:marquee.y,width:marquee.w,height:marquee.h}}/>}
