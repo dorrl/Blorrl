@@ -75,6 +75,7 @@ export default function App() {
   }
   function onDrop(event: DragEvent, targetId?: string) {
     event.preventDefault();
+    event.stopPropagation();
     const raw = event.dataTransfer.getData("application/x-blorrl");
     if (!raw) return;
     try {

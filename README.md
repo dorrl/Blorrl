@@ -1,18 +1,19 @@
 # Blorrl
 
-**A block-first compiled language for algorithms, automation, and server-side ideas.**
+**A block-first language workspace for algorithms, automation, and server-side ideas.**
 
-Blorrl deliberately skips the usual stage, sprites, and object inspector. Its editor is a compact programming workspace: arrange logic blocks, provide stdin, then **Run** or **Build** from the terminal strip.
+Blorrl uses a VS Code-inspired editor layout rather than a scene or object inspector. Blocks connect into a vertical program flow; the fixed Start node cannot be moved or deleted. Drag a block onto another to insert it before the target, or drag a library block into the flow. Select individual blocks with click, toggle selection with Shift/Ctrl-click, or drag a rectangle across empty canvas to select several blocks. Dragging a selected block moves the selection as a group.
 
 ## Current prototype
 
-- React + TypeScript + Vite web editor with a dark, terminal-inspired interface.
-- Block sequence for print, variables, stdin input, conditions, repeat counts, and addition.
-- Fast source-generation pass and a small expression parser/runtime. The runtime is sandboxed by design: it does not use eval, Function, or expose host globals.
-- Build shows generated .blorr source; export downloads it as main.blorr.
-- Express server provides GET /api/health and serves the production frontend bundle.
+- React + TypeScript + Vite editor with Explorer, tabs, breadcrumbs, status bar, and terminal.
+- Print, variables, stdin input, conditions, repeat counts, and addition blocks.
+- Source generation and a sandboxed expression parser/runtime; no eval, Function, or host globals.
+- Build displays generated .blorr source; Export downloads main.blorr.
+- Express serves the frontend and API from a **single port**. All backend routes are namespaced under /server/; health check: /server/api/health.
+- Development mode embeds Vite as Express middleware, so there is no separate Vite port or proxy port to remember.
 
-The current editor is a prototype, not yet a native machine-code or WebAssembly compiler. The current Run action interprets the supported subset in the browser. Conditional and repeat blocks currently generate source placeholders; nested block editing and their runtime semantics are future work. The intended next compiler milestone is a small typed intermediate representation and a WebAssembly backend, while keeping compilation incremental and lightweight.
+This remains a prototype, not a native machine-code or WebAssembly compiler. The browser interpreter currently skips conditional and repeat bodies; nested execution semantics and a WebAssembly backend remain future work.
 
 ## Requirements
 
@@ -24,14 +25,14 @@ The current editor is a prototype, not yet a native machine-code or WebAssembly 
     npm install
     npm run dev
 
-Vite serves the editor at http://localhost:5173; Express runs at http://localhost:3000. The API health check is http://localhost:3000/api/health.
+Open http://localhost:3000. The same origin serves the editor and /server/api/health; set PORT to change the single port.
 
 ## Production
 
     npm run build
     npm start
 
-Set PORT to override the Express port. The production server serves the built frontend from dist/.
+Production serves the built frontend and the /server/ API on the same port.
 
 ## Language sketch
 
@@ -42,17 +43,3 @@ Set PORT to override the Express port. The production server serves the built fr
     print "hello, " + name;
 
 Expressions currently support numbers, strings, booleans, variable references, parentheses, arithmetic, comparisons, and boolean operators. A variable must be declared before it is read.
-
-## Design principles
-
-1. **Quick builds:** linear source generation with no heavyweight toolchain in the browser.
-2. **Predictable execution:** a small parser and interpreter rather than arbitrary JavaScript execution.
-3. **Backend-ready:** keep visual blocks separate from generated source and runtime, so a future WASM/native backend can reuse the language front end.
-4. **Terminal-first UX:** stdin and stdout/stderr are always visible; no scene or object panels.
-
-## Project layout
-
-- src/App.tsx — editor and block interactions
-- src/language.ts — source generation, expression parser, browser runtime
-- src/styles.css — responsive Studio interface
-- server/index.ts — Express API and production static hosting
