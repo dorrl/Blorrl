@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent, PointerEvent } from "react";
+import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Play, Hammer, Plus, Trash2, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
 import { compile, runProgram, type Block, type BlockKind } from "./language";
 
@@ -41,7 +41,7 @@ export default function App() {
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
-    const handleResizeMove = (event: globalThis.PointerEvent) => {
+    const handleResizeMove = (event: PointerEvent) => {
       const origin = resizeOrigin.current;
       if (!origin) return;
       setWorkspaceRatio(Math.max(30, Math.min(85, origin.ratio + (event.clientY - origin.y) / Math.max(1, window.innerHeight) * 100)));
@@ -148,7 +148,7 @@ export default function App() {
       else moveSelection(payload.ids, targetId);
     } catch { /* Ignore invalid drag payloads. */ }
   }
-  function startMarquee(event: PointerEvent<HTMLDivElement>) {
+  function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
     if ((event.target as HTMLElement).closest(".block-card,button,input,textarea,.start-node")) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
