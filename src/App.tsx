@@ -29,6 +29,12 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [marquee, setMarquee] = useState<{x:number;y:number;w:number;h:number}|null>(null);
+  const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
+  const [workspaceRatio, setWorkspaceRatio] = useState(68);
+  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);
+  const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
+  const positionsRef = useRef(positions);
+  positionsRef.current = positions;
   const canvasRef = useRef<HTMLDivElement>(null);
   const marqueeStart = useRef<{x:number;y:number}|null>(null);
   const compiled = useMemo(() => compile(blocks), [blocks]);
@@ -137,7 +143,7 @@ export default function App() {
       <div className="top-meta"><span className="live-dot"/><span>WORKSPACE</span><span className="version">develop / main.blorr</span></div>
       <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Build</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
-    <section className="workspace">
+    <section className="workspace" style={{height: `calc((100vh - 76px) * ${workspaceRatio / 100})`}}>
       <aside className="sidebar">
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
@@ -182,7 +188,7 @@ export default function App() {
         <div className="editor-footer"><span><span className="footer-dot"/> {selected.length} selected <span className="footer-separator">·</span> {blocks.length} blocks in flow</span><span>SHIFT / CTRL TO MULTI-SELECT</span></div>
       </section>
     </section>
-    <section className="terminal">
+    <div className="pane-resizer" role="separator" aria-label="Resize workspace and terminal" onPointerDown={e=>{resizeOrigin.current={y:e.clientY,ratio:workspaceRatio};document.body.classList.add("resizing-pane");}}><span/><span/><span/></div>\n    <section className="terminal">
       <div className="terminal-top"><div className="terminal-title"><Terminal size={15}/><strong>TERMINAL</strong><span className="terminal-divider">/</span><span>OUTPUT</span></div><div className="terminal-status"><span className={"status-dot " + status}/>{status==="ran"?"EXECUTED":status==="built"?"BUILD SUCCESS":status==="error"?"ERROR":"IDLE"}<button className="clear-button" onClick={()=>{setOutput("");setStatus("idle");}}>Clear</button></div></div>
       <div className="terminal-body"><div className="terminal-input"><label htmlFor="stdin">STDIN</label><textarea id="stdin" value={stdin} onChange={e=>setStdin(e.target.value)} placeholder="Type input here… (one line per read)" rows={2}/><span>INPUT BUFFER</span></div><div className="terminal-output"><div className="output-label"><span>STDOUT / STDERR</span><span>UTF-8</span></div><pre className={status==="error"?"error-text":""}>{output}</pre></div></div>
       <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> BROWSER SANDBOX</span><span>COMPILE <b>·</b> {compiled.errors.length?"ERRORS":"INSTANT"}</span></div>
