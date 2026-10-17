@@ -17,6 +17,9 @@ serverRouter.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "blorrl", version: "0.2.0", runtime: "browser-sandbox" });
 });
 app.use("/server", serverRouter);
+app.use("/server", (_req, res) => {
+  res.status(404).json({ ok: false, error: "Unknown server route" });
+});
 
 async function start() {
   if (isProduction) {
