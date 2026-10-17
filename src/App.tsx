@@ -154,7 +154,7 @@ export default function App() {
     const block = allBlocks(blocks).find(b=>b.id===id);
     updateBlock(id,{elseChildren:block?.elseChildren ? undefined : [],elseId:block?.elseChildren ? undefined : crypto.randomUUID()});
   }
-  function updateBranch(id: string, branchId: string, condition: string) {
+  function updateBranch(branchId: string, condition: string) {
     const update = (items: Block[]): Block[] => items.map(b=>({...b,elseIf:b.elseIf?.map(br=>br.id===branchId?{...br,condition:condition}: {...br,children:update(br.children)}),children:update(b.children??[]),elseChildren:b.elseChildren?update(b.elseChildren):undefined}));
     setBlocks(update); setStatus("idle");
   }
@@ -334,7 +334,7 @@ export default function App() {
                     <span className="nested-grip"><GripVertical size={12}/></span><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong>{(child.kind==="let"||child.kind==="input")&&<input aria-label="Nested variable name" value={child.name??""} onChange={e=>updateBlock(child.id,{name:e.target.value})} onClick={e=>e.stopPropagation()}/>}<input className="nested-expression" aria-label="Nested block value" value={child.value} onChange={e=>updateBlock(child.id,{value:e.target.value})} onClick={e=>e.stopPropagation()}/>
                   </div>)}
                   {!(block.children ?? []).length && <div className="nested-empty">Drop blocks into this area</div>}
-                  {block.kind === "if" && (block.elseIf ?? []).map(branch=><div className="branch-panel" key={branch.id} data-drop-into={branch.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,branch.id)}><label className="branch-heading">ELSE IF <input value={branch.condition} onChange={e=>updateBranch(block.id,branch.id,e.target.value)} onClick={e=>e.stopPropagation()}/></label><div className="nested-label">BRANCH BODY</div>{branch.children.map(child=><div className="nested-item" key={child.id}><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong><span className="nested-value">{child.value}</span></div>)}</div>)}
+                  {block.kind === "if" && (block.elseIf ?? []).map(branch=><div className="branch-panel" key={branch.id} data-drop-into={branch.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,branch.id)}><label className="branch-heading">ELSE IF <input value={branch.condition} onChange={e=>updateBranch(branch.id,e.target.value)} onClick={e=>e.stopPropagation()}/></label><div className="nested-label">BRANCH BODY</div>{branch.children.map(child=><div className="nested-item" key={child.id}><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong><span className="nested-value">{child.value}</span></div>)}</div>)}
                   {block.kind === "if" && block.elseChildren && <div className="branch-panel" data-drop-into={block.elseId} onDragOver={e=>e.preventDefault()} onDrop={e=>block.elseId&&onDrop(e,block.elseId)}><div className="branch-heading">ELSE</div>{block.elseChildren.map(child=><div className="nested-item" key={child.id}><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong><span className="nested-value">{child.value}</span></div>)}</div>}
                   {block.kind === "if" && <div className="branch-actions"><button onClick={e=>{e.stopPropagation();addElseIf(block.id)}}><Plus size={11}/> Else if</button><button onClick={e=>{e.stopPropagation();toggleElse(block.id)}}><Plus size={11}/> Else</button></div>}
                 </div>}
