@@ -75,7 +75,7 @@ export default function App() {
   function addBlock(kind: BlockKind, beforeId?: string) {
     const block = makeBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
-    setPositions(current => ({...current,[block.id]:{x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:100 + blocks.length*18}}));
+    setPositions(current => ({...current,[block.id]:{x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:90 + blocks.length*95}}));
     setBlocks(current => {
       if (!beforeId) return [...current, block];
       const index = current.findIndex(item => item.id === beforeId);
@@ -95,6 +95,7 @@ export default function App() {
     setStatus("idle");
   }
   function onDragStart(event: DragEvent, payload: DragPayload) {
+    if ((event.target as HTMLElement).closest("input,button")) { event.preventDefault(); return; }
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "canvas") {
@@ -200,7 +201,7 @@ export default function App() {
       <div className="top-meta"><span className="live-dot"/><span>WORKSPACE</span><span className="version">develop / main.blorr</span></div>
       <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Build</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
-    <section className="workspace" style={{height: `calc((100vh - 76px) * ${workspaceRatio / 100})`}}>
+    <section className="workspace" style={{height: `calc(${workspaceRatio}vh - ${76 * workspaceRatio / 100}px)`}}>
       <aside className="sidebar">
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
@@ -222,7 +223,7 @@ export default function App() {
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (104 + index*104)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
