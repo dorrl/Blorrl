@@ -162,12 +162,10 @@ export default function App() {
         {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Drag a block onto another to insert it before that block. Drag from the library into the flow to add it. Click to select, Shift/Ctrl-click to add or remove blocks, or drag over empty canvas to marquee-select. Dragging a selected block moves the selection as a group. Use Build to inspect generated source or Run to execute it.</p><code>print "hello";</code></div>}
         <div className="block-canvas" ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>DRAG TO REORDER / CONNECT</span></div>
-          <div className="start-node"><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
+          <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <div key={block.id} className="flow-item">
-            <div className="connector"><span/></div>
-            <article data-block-id={block.id} draggable className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (104 + index*104)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
@@ -180,8 +178,7 @@ export default function App() {
                 </div>
               </div>
               <button className="delete-block" title="Remove block" onClick={e=>{e.stopPropagation();setBlocks(current=>current.filter(b=>b.id!==block.id));setSelected(current=>current.filter(id=>id!==block.id));setStatus("idle");}}><Trash2 size={14}/></button>
-            </article>
-          </div>)}
+            </article>)}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           {marquee && <div className="selection-marquee" style={{left:marquee.x,top:marquee.y,width:marquee.w,height:marquee.h}}/>}
         </div>
