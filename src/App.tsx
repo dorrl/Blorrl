@@ -72,10 +72,10 @@ export default function App() {
   function makeBlock(kind: BlockKind): Block {
     return { id: crypto.randomUUID(), kind, value: kind === "print" ? '"Hello!"' : kind === "input" ? "value" : kind === "if" ? "true" : "1", name: "value" } as Block;
   }
-  function addBlock(kind: BlockKind, beforeId?: string) {
+  function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
     const block = makeBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
-    setPositions(current => ({...current,[block.id]:{x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:90 + blocks.length*95}}));
+    setPositions(current => ({...current,[block.id]:dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:90 + blocks.length*95}}));
     setBlocks(current => {
       if (!beforeId) return [...current, block];
       const index = current.findIndex(item => item.id === beforeId);
@@ -144,7 +144,7 @@ export default function App() {
     if (!raw) return;
     try {
       const payload = JSON.parse(raw) as DragPayload;
-      if (payload.source === "library") addBlock(payload.kind, targetId);
+      if (payload.source === "library") { const rect = canvasRef.current?.getBoundingClientRect(); const point = rect && canvasRef.current ? {x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)} : undefined; addBlock(payload.kind, targetId, point); }
       else moveSelection(payload.ids, targetId);
     } catch { /* Ignore invalid drag payloads. */ }
   }
