@@ -12,10 +12,6 @@ export type RunResult = { output: string; error?: string };
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const reserved = new Set(["print", "let", "input", "if", "repeat", "true", "false"]);
 
-function quoteSource(value: string): string {
-  return JSON.stringify(value);
-}
-
 /** Turns the visual sequence into readable Blorrl source. This pass is linear in block count. */
 export function compile(blocks: Block[]): Compilation {
   const errors: string[] = [];
@@ -145,8 +141,15 @@ function numeric(a: Value, b: Value, op: string): number {
 }
 function comparable(a: Value, b: Value, op: string, inclusive = false, greater = false): boolean {
   if (typeof a !== typeof b || (typeof a !== "number" && typeof a !== "string")) throw new Error(`Operator ${op} expects matching numbers or strings.`);
-  if (greater) return inclusive ? a >= b : a > b;
-  return inclusive ? a <= b : a < b;
+  if (typeof a === "number" && typeof b === "number") {
+    if (greater) return inclusive ? a >= b : a > b;
+    return inclusive ? a <= b : a < b;
+  }
+  if (typeof a === "string" && typeof b === "string") {
+    if (greater) return inclusive ? a >= b : a > b;
+    return inclusive ? a <= b : a < b;
+  }
+  throw new Error(`Operator ${op} expects matching numbers or strings.`);
 }
 
 /** Executes a deliberately small, sandboxed language; no eval, Function, or host globals. */
