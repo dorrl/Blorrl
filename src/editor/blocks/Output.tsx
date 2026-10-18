@@ -1,12 +1,7 @@
 import type { ReactNode } from "react";
 import type { Block } from "../../language";
+type ValueSlotRenderer = (owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) => ReactNode;
 
-type ValueSlotRenderer = (
-  owner: Block,
-  field: "valueBlock" | "rightBlock",
-  value: string,
-  ariaLabel: string,
-) => ReactNode;
 
 type PrintBlockProps = {
   block: Block;

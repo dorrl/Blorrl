@@ -1,7 +1,86 @@
-import type { DragEvent, MouseEvent } from "react";
+import type { ReactNode, DragEvent, MouseEvent } from "react";
 import { GripVertical, Plus } from "lucide-react";
 import type { Block } from "../../language";
 import { catalog } from "../blockCatalog";
+type ValueSlotRenderer = (owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) => ReactNode;
+
+type IfConditionFieldProps = {
+  block: Block;
+  updateBlock: (id: string, patch: Partial<Block>) => void;
+  renderValueSlot: ValueSlotRenderer;
+  onDrop: (event: DragEvent, targetId?: string) => void;
+};
+
+/** Condition socket UI for an if block. */
+export function IfConditionField({
+  block,
+  updateBlock,
+  renderValueSlot,
+  onDrop,
+}: IfConditionFieldProps) {
+  const condition = block.conditionBlock;
+
+  return (
+    <div
+      className="condition-slot"
+      data-condition-for={block.id}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.currentTarget.classList.add("condition-hover");
+      }}
+      onDragLeave={(event) => event.currentTarget.classList.remove("condition-hover")}
+      onDrop={(event) => {
+        event.currentTarget.classList.remove("condition-hover");
+        onDrop(event, "condition:" + block.id);
+      }}
+    >
+      {condition ? (
+        condition.kind === "compare" ? (
+          <>
+            {renderValueSlot(condition, "valueBlock", condition.value, "Left condition value")}
+            <select
+              aria-label="Condition operator"
+              value={condition.comparisonOperator ?? "=="}
+              onChange={(event) =>
+                updateBlock(condition.id, {
+                  comparisonOperator: event.target.value as Block["comparisonOperator"],
+                })
+              }
+            >
+              <option>==</option>
+              <option>&gt;=</option>
+              <option>&lt;=</option>
+            </select>
+            {renderValueSlot(
+              condition,
+              "rightBlock",
+              condition.right ?? "0",
+              "Right condition value",
+            )}
+          </>
+        ) : (
+          <strong>{condition.kind === "true" ? "True" : "False"}</strong>
+        )
+      ) : (
+        <span>Drop Boolean</span>
+      )}
+    </div>
+  );
+}
+
+type RepeatBlockProps = {
+  block: Block;
+  renderValueSlot: ValueSlotRenderer;
+};
+
+/** Repeat count field UI. The loop body remains rendered by the editor. */
+export function RepeatBlock({ block, renderValueSlot }: RepeatBlockProps) {
+  return (
+    <label>
+      {renderValueSlot(block, "valueBlock", block.value, "Repeat count")}
+    </label>
+  );
+}
 
 type ControlBlockBodyProps = {
   block: Block;
