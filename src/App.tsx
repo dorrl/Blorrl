@@ -115,7 +115,8 @@ export default function App() {
       const movingTop = canvasRect.top + (movingOrigin?.y ?? movingElement?.offsetTop ?? 0) + dy - canvas.scrollTop;
       const movingLeft = canvasRect.left + (movingOrigin?.x ?? movingElement?.offsetLeft ?? 0) + dx - canvas.scrollLeft;
       const movingRight = movingLeft + (movingElement?.offsetWidth ?? 0);
-      const candidate = Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
+      const isLooseReporterDrag = drag.ids.length === 1 && !!movingElement && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind => movingElement.classList.contains(kind));
+      const candidate = isLooseReporterDrag ? undefined : Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
         .filter(element => !drag.ids.includes(element.dataset.blockId ?? "") && !["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>element.classList.contains(kind)))
         .map(element => {
           const rect = element.getBoundingClientRect();
@@ -133,7 +134,7 @@ export default function App() {
 
       const startNode = canvas.querySelector<HTMLElement>(".start-node");
       const startRect = startNode?.getBoundingClientRect();
-      const startCandidate = startNode && startRect ? {
+      const startCandidate = !isLooseReporterDrag && startNode && startRect ? {
         id: "__start",
         x: startNode.offsetLeft,
         y: startNode.offsetTop + startNode.offsetHeight - 1,
@@ -207,14 +208,6 @@ export default function App() {
         }
         setPositions(next);
         setStatus("idle");
-      } else if (drag.ids.length === 1) {
-        const moving = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`);
-        if (moving && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>moving.classList.contains(kind))) {
-          const next = {...positionsRef.current};
-          const origin = drag.origins[drag.ids[0]!];
-          if (origin) next[drag.ids[0]!] = origin;
-          setPositions(next);
-        }
       }
       snapGhostRef.current = null;
       setSnapGhost(null);
@@ -527,7 +520,25 @@ export default function App() {
             const selectedIds = selected.includes(block.id) ? selected : [block.id];
             const blockIndex = blocks.findIndex(item => item.id === block.id);
             const reporter = ["add","compare","true","false","get"].includes(block.kind);
-            const ids = selectedIds.length > 1 ? selectedIds : reporter ? [block.id] : blocks.slice(Math.max(0,blockIndex)).map(item=>item.id);
+            // Only carry the contiguous stack physically attached below this block.
+            // A block later in the program list is not automatically part of this stack.
+            const connectedStack = (startIndex: number) => {
+              const stackIds = [blocks[startIndex]!.id];
+              let previous = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${blocks[startIndex]!.id}"]`);
+              for (let index = startIndex + 1; index < blocks.length; index++) {
+                const nextBlock = blocks[index]!;
+                if (["add","compare","true","false","get"].includes(nextBlock.kind)) break;
+                const nextElement = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${nextBlock.id}"]`);
+                if (!previous || !nextElement) break;
+                const previousRect = previous.getBoundingClientRect();
+                const nextRect = nextElement.getBoundingClientRect();
+                if (Math.abs(nextRect.left - previousRect.left) > 12 || Math.abs(nextRect.top - (previousRect.bottom - 1)) > 12) break;
+                stackIds.push(nextBlock.id);
+                previous = nextElement;
+              }
+              return stackIds;
+            };
+            const ids = selectedIds.length > 1 ? selectedIds : reporter ? [block.id] : connectedStack(blockIndex);
             if (!selected.includes(block.id)) setSelected(selectedIds);
             const origins: Record<string,{x:number;y:number}> = {};
             ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:90 + blocks.findIndex(item=>item.id===id)*86}; });
