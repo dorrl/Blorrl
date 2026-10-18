@@ -2166,9 +2166,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   position: relative;
   left: auto;
   top: auto;
-  width: 330px;
+  width: max-content;
   max-width: none;
-  --palette-preview-scale: .58;
+  --palette-preview-scale: 1;
   margin: 0;
   transform: none;
   zoom: var(--palette-preview-scale);
