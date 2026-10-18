@@ -33,7 +33,17 @@ export default function App() {
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
-  const [sidebarWidth, setSidebarWidth] = useState(220);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") return 220;
+    try {
+      const saved = Number(window.localStorage.getItem("blorrl.sidebarWidth"));
+      return Number.isFinite(saved) && saved >= 150 && saved <= 420 ? saved : 220;
+    } catch {
+      return 220;
+    }
+  });
+  // Keep one uniform preview scale based on the sidebar width, not per-block fitting.
+  const palettePreviewScale = Math.max(0.42, Math.min(0.95, 0.58 * sidebarWidth / 220));
   const [spaceDown, setSpaceDown] = useState(false);
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
@@ -57,6 +67,14 @@ export default function App() {
   const compiled = useMemo(() => compile(executableBlocks), [executableBlocks]);
   const assemblyCompiled = useMemo(() => compileAssembly(executableBlocks), [executableBlocks]);
   const totalBlocks = allBlocks(blocks).length;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("blorrl.sidebarWidth", String(sidebarWidth));
+    } catch {
+      // The editor still works if storage is disabled or full.
+    }
+  }, [sidebarWidth]);
 
   useEffect(() => {
     const down = (event: globalThis.KeyboardEvent) => {
@@ -728,7 +746,7 @@ export default function App() {
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
         <div className="file-row"><span className="file-glyph">B</span><span>main.blorr</span><span className="file-unsaved"/></div>
-        <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onDragEnd={onLibraryDragEnd} onAddBlock={addBlock} />
+        <BlockLibrary query={query} previewScale={palettePreviewScale} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onDragEnd={onLibraryDragEnd} onAddBlock={addBlock} />
       </aside>
       <div className="sidebar-resizer" role="separator" aria-label="Resize sidebar" title="Drag to resize sidebar" onPointerDown={e=>{e.preventDefault();sidebarResizeOrigin.current={x:e.clientX,width:sidebarWidth};document.body.classList.add("resizing-sidebar");}}><span/></div>
       <section className="editor">
