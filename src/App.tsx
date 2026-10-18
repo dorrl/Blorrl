@@ -9,6 +9,7 @@ import { VariableBlock } from "./editor/blocks/VariableBlock";
 import { InputBlock } from "./editor/blocks/InputBlock";
 import { IfConditionField } from "./editor/blocks/IfConditionField";
 import { RepeatBlock } from "./editor/blocks/RepeatBlock";
+import { ValueSlot } from "./editor/blocks/ValueSlot";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
@@ -294,10 +295,19 @@ export default function App() {
   }
 
   function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
-    const nested = field === "valueBlock" ? owner.valueBlock : owner.rightBlock;
-    return <div className="value-slot" data-value-for={owner.id} data-value-field={field} onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("value-hover"); }} onDragLeave={e => e.currentTarget.classList.remove("value-hover")} onDrop={e => { e.currentTarget.classList.remove("value-hover"); onDrop(e, `value:${owner.id}:${field}`); }}>
-      {nested ? <><span className={"value-chip kind-" + nested.kind} draggable onDragStart={e => onDragStart(e, {source:"canvas",ids:[nested.id]})}><ReporterContent block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /></span><button className="value-eject" title="Move block to canvas" aria-label="Move nested value to canvas" onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); detachValueBlock(owner.id, field); }}>↗</button><button className="value-remove" aria-label="Remove nested value" onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); updateBlock(owner.id, field === "valueBlock" ? {valueBlock:undefined} : {rightBlock:undefined}); }}>×</button></> : <input className="value-input" aria-label={ariaLabel} value={value} onChange={e => updateBlock(owner.id, field === "valueBlock" ? {value:e.target.value} : {right:e.target.value})} onClick={e => e.stopPropagation()} />}
-    </div>;
+    return (
+      <ValueSlot
+        owner={owner}
+        field={field}
+        value={value}
+        ariaLabel={ariaLabel}
+        updateBlock={updateBlock}
+        onDrop={onDrop}
+        onDragStart={(event, id) => onDragStart(event, { source: "canvas", ids: [id] })}
+        onDetach={detachValueBlock}
+        renderValueSlot={renderValueSlot}
+      />
+    );
   }
   function dropCondition(targetId: string, child: Block, movingIds: string[] = []) {
     if (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare") return;
