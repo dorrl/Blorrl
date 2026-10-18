@@ -11,7 +11,7 @@ const port = Number(process.env.PORT ?? 3000);
 const webRoot = resolve(process.cwd(), "dist");
 const isProduction = process.env.NODE_ENV === "production";
 app.disable("x-powered-by");
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "2mb" }));
 
 const serverRouter = express.Router();
 serverRouter.get("/api/health", (_req, res) => {
@@ -21,7 +21,7 @@ serverRouter.post("/api/build/:target", async (req, res) => {
   const target = req.params.target;
   if (target !== "assembly" && target !== "exe") { res.status(400).send("Unknown build target. Use assembly or exe."); return; }
   const source = req.body?.source;
-  if (typeof source !== "string" || source.length > 200_000 || !source.includes(".globl main") || !source.includes("main:")) {
+  if (typeof source !== "string" || source.length > 1_000_000 || !source.includes(".globl main") || !source.includes("main:")) {
     res.status(400).send("Invalid or oversized x64 assembly source."); return;
   }
   const directory = await mkdtemp(join(tmpdir(), "blorrl-build-"));
