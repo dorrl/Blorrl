@@ -1522,10 +1522,36 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   accent-color: #8cc8ff;
 }
 .block-card.kind-get {
-  background: #8a64bd;
-  border-color: #c1a4ee;
+  width: max-content;
+  min-width: 0;
+  max-width: min(100%, 520px);
   min-height: 0;
-  height: 38px;
+  height: auto;
+  padding: 0;
+  border-radius: 10px 4px 4px 10px;
+  overflow: visible;
+  background: #7650b5;
+  border-color: #c1a4ee;
+  color: #fff;
+}
+.block-card.kind-get .block-gutter,
+.block-card.kind-get .block-type {
+  display: none;
+}
+.block-card.kind-get .block-content {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 0;
+  padding: 3px 7px;
+  align-items: center;
+  gap: 0;
+}
+.block-card.kind-get .block-fields {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  align-items: center;
 }
 .catalog-icon.get, .type-icon.get {
   background: #392d4a;
