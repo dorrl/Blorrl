@@ -31,7 +31,7 @@ serverRouter.post("/api/build/:target", async (req, res) => {
     await writeFile(input, source, "utf8");
     if (target === "assembly") {
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.setHeader("Content-Disposition", "attachment; filename="main.s"");
+      res.setHeader("Content-Disposition", "attachment; filename=\\\"main.s\\\"");
       res.send(source);
       return;
     }
