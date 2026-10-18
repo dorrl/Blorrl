@@ -40,6 +40,7 @@ export default function App() {
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
+  const [libraryDragKind, setLibraryDragKind] = useState<BlockKind | null>(null);
   const snapGhostContentRef = useRef<HTMLDivElement>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
@@ -271,7 +272,44 @@ export default function App() {
     const container = snapGhostContentRef.current;
     if (!container) return;
     container.replaceChildren();
-    if (!snapGhost || !dragPreview || !canvasRef.current) return;
+    if (!snapGhost || !canvasRef.current) return;
+
+    if (libraryDragKind) {
+      const item = catalog.find(entry => entry.kind === libraryDragKind);
+      if (!item) return;
+      const ghost = document.createElement("article");
+      ghost.className = `block-card ${categoryClass(libraryDragKind)} kind-${libraryDragKind}`;
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.setAttribute("inert", "");
+      Object.assign(ghost.style, { position: "relative", left: "auto", top: "auto", width: "280px", minHeight: "42px", boxSizing: "border-box", pointerEvents: "none" });
+      const gutter = document.createElement("div");
+      gutter.className = "block-gutter";
+      const gutterMark = document.createElement("span");
+      gutterMark.textContent = "+";
+      gutter.appendChild(gutterMark);
+      const content = document.createElement("div");
+      content.className = "block-content";
+      const type = document.createElement("div");
+      type.className = "block-type";
+      const label = document.createElement("strong");
+      label.textContent = item.label;
+      const kind = document.createElement("span");
+      kind.className = "block-kind";
+      kind.textContent = libraryDragKind.toUpperCase();
+      type.append(label, kind);
+      const fields = document.createElement("div");
+      fields.className = "block-fields";
+      const hint = document.createElement("span");
+      hint.className = "field-hint";
+      hint.textContent = item.hint;
+      fields.appendChild(hint);
+      content.append(type, fields);
+      ghost.append(gutter, content);
+      container.appendChild(ghost);
+      return;
+    }
+
+    if (!dragPreview) return;
     dragPreview.ids.forEach((id, index) => {
       const source = Array.from(canvasRef.current!.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(element => element.dataset.blockId === id);
       if (!source) return;
@@ -289,7 +327,7 @@ export default function App() {
       Object.assign(clone.style, { position: "relative", left: "auto", top: "auto", transform: "none", zIndex: "auto", width: `${sourceRect.width}px`, minHeight: `${sourceRect.height}px`, boxSizing: "border-box", marginTop: index ? "-1px" : "0", pointerEvents: "none" });
       container.appendChild(clone);
     });
-  }, [snapGhost?.targetId, dragPreview?.ids.join(",")]);
+  }, [snapGhost?.targetId, dragPreview?.ids.join(","), libraryDragKind]);
 
   function updateBlock(id: string, patch: Partial<Block>) {
     setBlocks(current => updateBlockTree(current, id, patch));
@@ -299,11 +337,11 @@ export default function App() {
     const attached = getStartAttachedBlocks(blocks);
     const lastAttached = attached[attached.length - 1];
     const block = createBlock(kind);
-    block.attachedTo = beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
+    block.attachedTo = beforeId === "__start" ? "__start" : beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
     const rect = canvasRef.current?.getBoundingClientRect();
-    const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
-    const targetPosition = beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
-    const targetElement = beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
+    const targetIndex = beforeId && beforeId !== "__start" ? blocks.findIndex(item => item.id === beforeId) : -1;
+    const targetPosition = beforeId === "__start" ? {x:42,y:90} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
+    const targetElement = beforeId === "__start" ? canvasRef.current?.querySelector<HTMLElement>(".start-node") : beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
     const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
     const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;
     setPositions(current => {
@@ -315,6 +353,10 @@ export default function App() {
     });
     setBlocks(current => {
       if (!beforeId) return [...current, block];
+      if (beforeId === "__start") {
+        const reparented = current.map(item => item.attachedTo === "__start" ? { ...item, attachedTo: block.id } : item);
+        return [block, ...reparented];
+      }
       const index = current.findIndex(item => item.id === beforeId);
       if (index < 0) return [...current, block];
       const reparented = current.map(item => item.attachedTo === beforeId ? { ...item, attachedTo: block.id } : item);
@@ -412,8 +454,15 @@ export default function App() {
   }
   function onDragStart(event: DragEvent, payload: DragPayload) {
     if (spaceDown || (payload.source === "canvas" && (event.target as HTMLElement).closest("input,button"))) { event.preventDefault(); return; }
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed = payload.source === "library" ? "copy" : "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
+    if (payload.source === "library") {
+      setLibraryDragKind(payload.kind);
+      snapGhostRef.current = null;
+      setSnapGhost(null);
+    } else {
+      setLibraryDragKind(null);
+    }
     if (payload.source === "canvas") {
       const nestedReporter = !!(event.target as HTMLElement).closest(".value-chip");
       const ids = !nestedReporter && selected.includes(payload.ids[0]) ? selected : payload.ids;
@@ -457,19 +506,55 @@ export default function App() {
     setPositions(next);
     setStatus("idle");
   }
+  function handleLibraryDragOver(event: DragEvent<HTMLElement>) {
+    if (!libraryDragKind || !event.dataTransfer.types.includes("application/x-blorrl")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const candidates: Array<{id:string;x:number;y:number;distance:number}> = [];
+    const start = canvas.querySelector<HTMLElement>(".start-node");
+    if (start) {
+      const rect = start.getBoundingClientRect();
+      const distance = Math.abs(event.clientY - rect.bottom);
+      if (event.clientX >= rect.left - 18 && event.clientX <= rect.right + 18 && distance < 34)
+        candidates.push({id:"__start",x:start.offsetLeft,y:start.offsetTop+start.offsetHeight-1,distance});
+    }
+    Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).filter(element => element.parentElement === canvas).forEach(element => {
+      const rect = element.getBoundingClientRect();
+      const distance = Math.abs(event.clientY - rect.bottom);
+      if (event.clientX >= rect.left - 18 && event.clientX <= rect.right + 18 && distance < 34) {
+        const id = element.dataset.blockId;
+        if (id) candidates.push({id,x:element.offsetLeft,y:element.offsetTop+element.offsetHeight-1,distance});
+      }
+    });
+    const nearest = candidates.sort((a,b)=>a.distance-b.distance)[0];
+    const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : null;
+    const previous = snapGhostRef.current;
+    if (!nextGhost || !previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
+    snapGhostRef.current = nextGhost;
+  }
+  function onLibraryDragEnd() {
+    setLibraryDragKind(null);
+    snapGhostRef.current = null;
+    setSnapGhost(null);
+  }
   function onDrop(event: DragEvent, targetId?: string) {
     event.preventDefault(); event.stopPropagation();
-    const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw)return;
+    const insertionTarget = snapGhostRef.current?.targetId.startsWith("__insert__:") ? snapGhostRef.current.targetId.slice("__insert__:".length) : undefined;
+    const resolvedTargetId = insertionTarget ?? targetId;
+    setLibraryDragKind(null);
+    const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
     try {
       const payload=JSON.parse(raw) as DragPayload;
-      const valueTarget = targetId?.startsWith("value:") ? targetId.slice("value:".length).split(":") : undefined;
+      const valueTarget = resolvedTargetId?.startsWith("value:") ? resolvedTargetId.slice("value:".length).split(":") : undefined;
       if (valueTarget && valueTarget.length===2) {
         const [ownerId,field]=valueTarget;
         const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
         if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,{...child,attachedTo:undefined}));
         return;
       }
-      const conditionTarget = targetId?.startsWith("condition:") ? targetId.slice("condition:".length) : undefined;
+      const conditionTarget = resolvedTargetId?.startsWith("condition:") ? resolvedTargetId.slice("condition:".length) : undefined;
       if (conditionTarget) {
         if (payload.source === "library") dropCondition(conditionTarget,createBlock(payload.kind));
         else {
@@ -481,16 +566,16 @@ export default function App() {
       const reporterKinds = ["add","compare","true","false","get"];
       const movingKinds = payload.source === "library" ? [payload.kind] : allBlocks(blocks).filter(b=>payload.ids.includes(b.id)).map(b=>b.kind);
       const isReporter = movingKinds.some(kind=>reporterKinds.includes(kind));
-      const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
-      const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
-      if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
-        if(payload.source==="library") insertNested(targetId,createBlock(payload.kind));
-        else nestBlocks(targetId,payload.ids);
+      const target=resolvedTargetId ? allBlocks(blocks).find(b=>b.id===resolvedTargetId) : undefined;
+      const branchTarget=!!resolvedTargetId && allBlocks(blocks).some(b=>b.elseId===resolvedTargetId||(b.elseIf??[]).some(br=>br.id===resolvedTargetId));
+      if (!insertionTarget && resolvedTargetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
+        if(payload.source==="library") insertNested(resolvedTargetId,createBlock(payload.kind));
+        else nestBlocks(resolvedTargetId,payload.ids);
       } else {
         const rect=canvasRef.current?.getBoundingClientRect();
         const point=rect&&canvasRef.current?{x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)}:undefined;
         if (payload.source === "library") {
-          addBlock(payload.kind, targetId, point);
+          addBlock(payload.kind, resolvedTargetId, point);
         } else if (isReporter) {
           const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
           if (child && point) {
@@ -501,6 +586,7 @@ export default function App() {
         } else moveSelection(payload.ids,targetId);
       }
     } catch { /* Ignore invalid drag payloads. */ }
+    finally { snapGhostRef.current = null; setSnapGhost(null); }
   }
   function selectBlock(_event: MouseEvent, id: string) {
     setSelected([id]);
@@ -585,7 +671,7 @@ export default function App() {
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
         <div className="file-row"><span className="file-glyph">B</span><span>main.blorr</span><span className="file-unsaved"/></div>
-        <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onAddBlock={addBlock} />
+        <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onDragEnd={onLibraryDragEnd} onAddBlock={addBlock} />
       </aside>
       <div className="sidebar-resizer" role="separator" aria-label="Resize sidebar" title="Drag to resize sidebar" onPointerDown={e=>{e.preventDefault();sidebarResizeOrigin.current={x:e.clientX,width:sidebarWidth};document.body.classList.add("resizing-sidebar");}}><span/></div>
       <section className="editor">
@@ -593,9 +679,9 @@ export default function App() {
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span></div></div>
         {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag or Shift + mouse wheel pans the canvas. Drag blocks to move them. Only one block can be selected at a time. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
-        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)} onWheel={event => { if (event.shiftKey && canvasRef.current) { canvasRef.current.scrollLeft += event.deltaY; event.preventDefault(); } }}>
+        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => { e.preventDefault(); handleLibraryDragOver(e); }} onDragLeave={e => { if (!canvasRef.current?.contains(e.relatedTarget as Node)) { snapGhostRef.current=null; setSnapGhost(null); } }} onDrop={e => onDrop(e)} onWheel={event => { if (event.shiftKey && canvasRef.current) { canvasRef.current.scrollLeft += event.deltaY; event.preventDefault(); } }}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
-          <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
+          <div className="start-node" style={{left:42,top:38}} onDragOver={handleLibraryDragOver}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
@@ -637,7 +723,7 @@ export default function App() {
             snapGhostRef.current = null;
             setSnapGhost(null);
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-          }} onClick={e => selectBlock(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
+          }} onClick={e => selectBlock(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");handleLibraryDragOver(e);}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + categoryClass(block.kind) + " " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
