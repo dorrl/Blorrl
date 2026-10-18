@@ -259,7 +259,7 @@ export function compileC(blocks: Block[]): Compilation {
       if (b.kind === "let" || b.kind === "input") {
         const name = b.name?.trim() ?? "";
         if (!identifier.test(name) || reserved.has(name)) errors.push("Invalid variable name \"" + name + "\".");
-        else names.set(name, b.types?.includes("string") && !b.types.includes("number") ? "string" : b.types?.includes("boolean") && !b.types.includes("number") ? "boolean" : "number");
+        else names.set(name, selectedLiteralType(b));
       }
       if (b.conditionBlock) scan([b.conditionBlock]);
       scan(b.children ?? []);
