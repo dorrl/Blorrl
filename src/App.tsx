@@ -340,7 +340,7 @@ export default function App() {
     block.attachedTo = beforeId === "__start" ? "__start" : beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId && beforeId !== "__start" ? blocks.findIndex(item => item.id === beforeId) : -1;
-    const targetPosition = beforeId === "__start" ? {x:42,y:90} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
+    const targetPosition = beforeId === "__start" ? {x:42,y:38} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
     const targetElement = beforeId === "__start" ? canvasRef.current?.querySelector<HTMLElement>(".start-node") : beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
     const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
     const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;

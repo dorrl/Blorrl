@@ -4,7 +4,7 @@ import type { BlockKind } from "../language";
 import { catalog } from "../editor/blockCatalog";
 type BlockLibraryProps = { query: string; onQueryChange: (query: string) => void; onDragStart: (event: DragEvent<HTMLButtonElement>, kind: BlockKind) => void; onDragEnd: () => void; onAddBlock: (kind: BlockKind) => void };
 const categoryOrder = ["Output", "Variables", "Control", "Values"] as const;
-export function BlockLibrary({ query, onQueryChange, onDragStart, onAddBlock }: BlockLibraryProps) {
+export function BlockLibrary({ query, onQueryChange, onDragStart, onDragEnd, onAddBlock }: BlockLibraryProps) {
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint + " " + item.category).toLowerCase().includes(query.toLowerCase()));
   return <>
     <div className="library-head"><span>BLOCKS</span><span>{visibleCatalog.length.toString().padStart(2, "0")}</span></div>
