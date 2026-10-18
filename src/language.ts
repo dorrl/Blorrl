@@ -284,7 +284,6 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
 export function compileAssembly(blocks: Block[]): Compilation {
   const errors: string[] = [];
   const names = new Map<string, ValueType>();
-  const strings: string[] = [];
   const data: string[] = [];
   const code: string[] = [];
   let labelIndex = 0;
