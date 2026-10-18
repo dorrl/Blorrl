@@ -2138,3 +2138,55 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .library-block-preview .preview-value { display:inline-block; padding:2px 5px; border:1px solid #454b57; border-radius:3px; background:#242730; color:#dfe4ed; font:10px var(--mono); }
 .catalog-item .catalog-grip { display:none; }
 .catalog-item:hover .library-block-preview { filter:brightness(1.12); }
+
+
+/* Palette cards use the same block components and dimensions as canvas cards.
+   Scale only the palette presentation; the insertion ghost restores the unscaled
+   computed width before it is placed on the canvas. */
+.catalog-item {
+  display: block;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  margin: 4px 0 8px;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: grab;
+}
+.catalog-item:hover {
+  background: #2a2d35;
+  border-color: #3a3f49;
+}
+.catalog-item:active { cursor: grabbing; }
+.library-block-preview {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 330px;
+  max-width: none;
+  margin: 0 0 -34px;
+  transform: scale(.58);
+  transform-origin: top left;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.block-card.library-block-preview.kind-add,
+.block-card.library-block-preview.kind-compare,
+.block-card.library-block-preview.kind-get {
+  width: max-content;
+  max-width: 520px;
+}
+.library-block-preview .block-gutter { min-width: 29px; }
+.library-block-preview .block-fields { white-space: nowrap; }
+.library-block-preview .value-slot { pointer-events: none; }
+.library-block-preview input,
+.library-block-preview select,
+.library-block-preview button { pointer-events: none; }
+.catalog-item:focus-visible {
+  outline: 1px solid #8cc8ff;
+  outline-offset: 2px;
+}
