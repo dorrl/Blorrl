@@ -227,7 +227,17 @@ export default function App() {
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
     const block = makeBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
-    setPositions(current => ({...current,[block.id]:dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:90 + blocks.length*95}}));
+    const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
+    const targetPosition = beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
+    const insertY = targetPosition?.y ?? dropPoint?.y ?? 90 + blocks.length*95;
+    const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;
+    setPositions(current => {
+      const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
+      if (beforeId && targetPosition) Object.entries(current).forEach(([id,point]) => {
+        if (id !== block.id && point.y >= insertY) next[id] = {x:point.x,y:point.y+blockHeight-8};
+      });
+      return next;
+    });
     setBlocks(current => {
       if (!beforeId) return [...current, block];
       const index = current.findIndex(item => item.id === beforeId);
