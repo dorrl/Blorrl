@@ -12,6 +12,7 @@ const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "print", label: "Print", hint: "Write a value to terminal" },
   { kind: "let", label: "Variable", hint: "Store a value" },
   { kind: "input", label: "Input", hint: "Read a line from stdin" },
+  { kind: "get", label: "Get variable", hint: "Output a variable value" },
   { kind: "if", label: "If condition", hint: "Run a block when true" },
   { kind: "repeat", label: "Repeat", hint: "Repeat a number of times" },
   { kind: "add", label: "Add", hint: "Add two numbers" },
@@ -34,6 +35,7 @@ export default function App() {
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
   const [spaceDown, setSpaceDown] = useState(false);
+  const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
   const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
@@ -187,7 +189,7 @@ export default function App() {
     setBlocks(update); setStatus("idle");
   }
   function makeBlock(kind: BlockKind): Block {
-    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? '"Hello!"' : kind==="if" ? "true" : "1"};
+    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? "Hello!" : kind==="get" ? "value" : kind==="if" ? "true" : "1"};
     if (kind==="let" || kind==="input") {block.name="value";block.types=["number"];}
     if (kind==="add") {block.right="1";block.operator="+";}
     if (kind==="if" || kind==="repeat") block.children=[];
@@ -424,9 +426,10 @@ export default function App() {
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
-                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><div className="type-picker"><span>ALLOWED TYPES</span>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)} onClick={e=>e.stopPropagation()}/>{type}</label>)}</div></>}
-                  {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><div className="type-picker"><span>ALLOWED TYPES</span>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)} onClick={e=>e.stopPropagation()}/>{type}</label>)}</div><span className="field-hint">Reads one line from terminal input</span></>}
-                  {block.kind === "print" && <label className="wide-field">EXPRESSION<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
+                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Variable types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}</>}
+                  {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Input types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}<span className="field-hint">Reads one line from terminal input</span></>}
+                  {block.kind === "print" && <label className="wide-field">TEXT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
+                  {block.kind === "get" && <label>VARIABLE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "if" && <label className="wide-field">CONDITION<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "repeat" && <label>COUNT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "add" && <div className="operator-fields"><input aria-label="Left operand" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /><select aria-label="Operator" value={block.operator ?? "+"} onChange={e=>updateBlock(block.id,{operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}><option>+</option><option>-</option><option>*</option><option>/</option></select><input aria-label="Right operand" value={block.right ?? "1"} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></div>}
