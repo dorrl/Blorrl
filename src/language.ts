@@ -2,7 +2,7 @@ export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "a
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
-  id: string; kind: BlockKind; value: string; name?: string; right?: string; valueBlock?: Block; rightBlock?: Block;
+  id: string; kind: BlockKind; value: string; name?: string; constant?: boolean; right?: string; valueBlock?: Block; rightBlock?: Block;
   operator?: "+" | "-" | "*" | "/"; comparisonOperator?: "==" | ">=" | "<="; types?: ValueType[]; children?: Block[]; conditionBlock?: Block;
   elseIf?: Branch[]; elseChildren?: Block[]; elseId?: string;
 };
@@ -81,7 +81,7 @@ export function compile(blocks: Block[]): Compilation {
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) errors.push("Block " + line + ": invalid variable name \"" + name + "\".");
-          else lines.push(pad + "let " + name + " = " + (block.valueBlock ? blockExpression(block.valueBlock) : literalForLanguage(block)) + ";");
+          else lines.push(pad + (block.constant ? "const " : "let ") + name + " = " + (block.valueBlock ? blockExpression(block.valueBlock) : literalForLanguage(block)) + ";");
           break;
         }
         case "input": {
@@ -223,6 +223,7 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
   if (compilation.errors.length) return { output: "", error: compilation.errors.join("\n") };
   if (!blocks) return { output: "", error: "No block model was provided to the runtime." };
   const variables = new Map<string, Value>();
+  const constants = new Set<string>();
   const inputLines = stdin.split(/\r?\n/); let inputIndex = 0; let steps = 0;
   const output: string[] = [];
   function execute(items: Block[]) {
@@ -233,12 +234,17 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid variable name \"" + name + "\".");
-          variables.set(name, block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : literalForRuntime(block)); break;
+          if (constants.has(name)) throw new Error("Cannot reassign constant \"" + name + "\".");
+          if (block.constant && variables.has(name)) throw new Error("Cannot redeclare existing variable \"" + name + "\" as const.");
+          variables.set(name, block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : literalForRuntime(block));
+          if (block.constant) constants.add(name);
+          break;
         }
         case "input": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid input variable name \"" + name + "\".");
           if (inputIndex >= inputLines.length || (inputIndex === inputLines.length - 1 && inputLines[inputIndex] === "")) throw new Error("Input exhausted. Add a line in the STDIN panel.");
+          if (constants.has(name)) throw new Error("Cannot reassign constant \"" + name + "\".");
           variables.set(name, inputLines[inputIndex++]!); break;
         }
         case "get": {

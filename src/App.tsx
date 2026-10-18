@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Play, Hammer, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check, Save, FolderOpen } from "lucide-react";
+import { Play, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check, Save, FolderOpen } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
 import { TerminalPanel } from "./components/TerminalPanel";
@@ -30,6 +30,7 @@ export default function App() {
   const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ids:string[];dx:number;dy:number}|null>(null);
   const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
   const snapGhostRef = useRef<SnapGhost | null>(null);
   snapGhostRef.current = snapGhost;
@@ -100,12 +101,7 @@ export default function App() {
 
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
-      const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
-      drag.ids.forEach(id => {
-        const origin = drag.origins[id];
-        if (origin) next[id] = { x: Math.max(12, origin.x + dx), y: Math.max(64, origin.y + dy) };
-      });
-      setPositions(next);
+      setDragPreview({ids:drag.ids,dx,dy});
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const movingOrigin = drag.origins[drag.ids[0] ?? ""];
@@ -165,50 +161,57 @@ export default function App() {
       const drag = blockPointerDrag.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       blockPointerDrag.current = null;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
       const ghost = snapGhostRef.current;
-      if (ghost) {
-        const canvas = canvasRef.current;
-        const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
-        if (ghost.targetId.startsWith("__value__:")) {
-          const [,targetId,field] = ghost.targetId.split(":");
-          setBlocks(current=>{
-            const child=allBlocks(current).find(block=>drag.ids.includes(block.id));
-            if(!child || !["add","compare","true","false","get"].includes(child.kind) || !targetId || (field!=="valueBlock"&&field!=="rightBlock")) return current;
-            return putValue(removeIds(current,drag.ids),targetId,field,child);
-          });
-          drag.ids.forEach(id=>delete next[id]);
-          setSelected(drag.ids.slice(0,1));
-        } else if (ghost.targetId.startsWith("__condition__:")) {
-          const targetId = ghost.targetId.slice("__condition__:".length);
-          setBlocks(current => {
-            const child = current.find(block => drag.ids.includes(block.id));
-            if (!child || (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare")) return current;
-            return putCondition(removeIds(current, drag.ids), targetId, child);
-          });
-          drag.ids.forEach(id => delete next[id]);
-          setSelected(drag.ids.slice(0,1));
-        } else {
-          const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
-          setBlocks(current => {
-            const moving = current.filter(block => drag.ids.includes(block.id));
-            const rest = current.filter(block => !drag.ids.includes(block.id));
-            const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
-            rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
-            return rest;
-          });
-          Object.entries(next).forEach(([id, point]) => {
-            if (!drag.ids.includes(id) && point.y >= ghost.y) next[id] = {x:point.x,y:point.y+movingHeight};
-          });
-          let y = ghost.y;
-          drag.ids.forEach(id => {
-            next[id] = { x: ghost.x, y };
-            const movingElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
-            y += (movingElement?.offsetHeight ?? 38) - 1;
-          });
-        }
-        setPositions(next);
-        setStatus("idle");
+      const canvas = canvasRef.current;
+      const next: Record<string, {x:number;y:number}> = {...positionsRef.current};
+
+      if (ghost?.targetId.startsWith("__value__:")) {
+        const [,targetId,field] = ghost.targetId.split(":");
+        setBlocks(current => {
+          const child = allBlocks(current).find(block => drag.ids.includes(block.id));
+          if (!child || !["add","compare","true","false","get"].includes(child.kind) || !targetId || (field !== "valueBlock" && field !== "rightBlock")) return current;
+          return putValue(removeIds(current,drag.ids),targetId,field,child);
+        });
+        drag.ids.forEach(id => delete next[id]);
+        setSelected(drag.ids.slice(0,1));
+      } else if (ghost?.targetId.startsWith("__condition__:")) {
+        const targetId = ghost.targetId.slice("__condition__:".length);
+        setBlocks(current => {
+          const child = allBlocks(current).find(block => drag.ids.includes(block.id));
+          if (!child || (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare")) return current;
+          return putCondition(removeIds(current,drag.ids),targetId,child);
+        });
+        drag.ids.forEach(id => delete next[id]);
+        setSelected(drag.ids.slice(0,1));
+      } else if (ghost) {
+        const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
+        setBlocks(current => {
+          const moving = current.filter(block => drag.ids.includes(block.id));
+          const rest = current.filter(block => !drag.ids.includes(block.id));
+          const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
+          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
+          return rest;
+        });
+        Object.entries(next).forEach(([id,point]) => {
+          if (!drag.ids.includes(id) && point.y >= ghost.y) next[id] = {x:point.x,y:point.y+movingHeight};
+        });
+        let y = ghost.y;
+        drag.ids.forEach(id => {
+          next[id] = {x:ghost.x,y};
+          y += (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1;
+        });
+      } else {
+        drag.ids.forEach(id => {
+          const origin = drag.origins[id];
+          if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
+        });
       }
+
+      setPositions(next);
+      setDragPreview(null);
+      if (ghost) setStatus("idle");
       snapGhostRef.current = null;
       setSnapGhost(null);
     };
@@ -242,7 +245,6 @@ export default function App() {
     return block;
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
-    if (["add","compare","true","false","get"].includes(kind) && !beforeId && !dropPoint) { setOutput("Drag this value block into a value socket."); setStatus("idle"); return; }
     const block = makeBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
@@ -327,8 +329,19 @@ export default function App() {
     updateBlock(id, {types: checked ? [...new Set([...types, type])] : types.filter(t => t !== type)});
   }
   function addElseIf(id: string) {
-    const update = (items: Block[]): Block[] => items.map(b => ({...b,elseIf:b.id===id?[...(b.elseIf??[]),{id:crypto.randomUUID(),condition:"false",children:[]}]:b.elseIf,children:update(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:update(br.children)})),elseChildren:b.elseChildren?update(b.elseChildren):undefined}));
-    setBlocks(update); setStatus("idle");
+    const update = (items: Block[]): Block[] => items.map(block => ({
+      ...block,
+      children: update(block.children ?? []),
+      elseIf: block.id === id
+        ? [...(block.elseIf ?? []).map(branch => ({ ...branch, children: update(branch.children) })), { id: crypto.randomUUID(), condition: "false", children: [] }]
+        : block.elseIf?.map(branch => ({ ...branch, children: update(branch.children) })),
+      elseChildren: block.elseChildren ? update(block.elseChildren) : undefined,
+      conditionBlock: block.conditionBlock ? update([block.conditionBlock])[0] : undefined,
+      valueBlock: block.valueBlock ? update([block.valueBlock])[0] : undefined,
+      rightBlock: block.rightBlock ? update([block.rightBlock])[0] : undefined,
+    }));
+    setBlocks(update);
+    setStatus("idle");
   }
   function toggleElse(id: string) {
     const block = allBlocks(blocks).find(b=>b.id===id);
@@ -467,10 +480,6 @@ export default function App() {
     } catch (error) { setOutput(error instanceof Error ? error.message : String(error)); setStatus("error"); }
     finally { setBusy(false); }
   }
-  function build() {
-    setOutput(assemblyCompiled.errors.length ? assemblyCompiled.errors.join("\n") : assemblyCompiled.code);
-    setStatus(assemblyCompiled.errors.length ? "error" : "built");
-  }
   async function downloadBuild(target: "assembly" | "exe") {
     setBusy(true);
     try {
@@ -525,7 +534,7 @@ export default function App() {
       <input type="file" accept=".blorrl,application/json" hidden onChange={loadProject}/>
       <a className="brand" href="#"><span className="brand-mark"><Blocks size={18}/></span><span>blorrl<span className="brand-dot">.</span></span><span className="studio-tag">STUDIO</span></a>
       <div className="top-meta"><span className="live-dot"/><span>WORKSPACE</span><span className="version">develop / main.blorr</span></div>
-      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={() => document.querySelector<HTMLInputElement>('.topbar input[type="file"]')?.click()}><FolderOpen size={13}/> Open</button><button className="build-button" onClick={saveProject}><Save size={13}/> Save .blorrl</button><button className="build-button" onClick={build}><Hammer size={14}/> Source</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("assembly")}><Download size={13}/> .s</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
+      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={() => document.querySelector<HTMLInputElement>('.topbar input[type="file"]')?.click()}><FolderOpen size={13}/> Open</button><button className="build-button" onClick={saveProject}><Save size={13}/> Save .blorrl</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
     <section className="workspace" style={{height: `calc(${workspaceRatio}vh - ${76 * workspaceRatio / 100}px)`}}>
       <aside className="sidebar" style={{width:sidebarWidth,flexBasis:sidebarWidth}}>
@@ -545,7 +554,7 @@ export default function App() {
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:selected.includes(block.id)?4:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
             e.preventDefault();
             e.stopPropagation();
@@ -582,7 +591,7 @@ export default function App() {
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
-                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE{renderValueSlot(block,"valueBlock",block.value,"Variable value")}</label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Variable types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}</>}
+                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label className="const-toggle"><input type="checkbox" checked={!!block.constant} onChange={e=>updateBlock(block.id,{constant:e.target.checked})} onClick={e=>e.stopPropagation()}/> const</label><label>VALUE{renderValueSlot(block,"valueBlock",block.value,"Variable value")}</label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Variable types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}</>}
                   {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Input types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}<span className="field-hint">Reads one line from terminal input</span></>}
                   {block.kind === "print" && <label className="wide-field">TEXT{renderValueSlot(block,"valueBlock",block.value,"Print text or drop a value block")}</label>}
                   {block.kind === "get" && <label>VARIABLE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
