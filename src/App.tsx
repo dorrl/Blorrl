@@ -204,6 +204,14 @@ export default function App() {
         }
         setPositions(next);
         setStatus("idle");
+      } else if (drag.ids.length === 1) {
+        const moving = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`);
+        if (moving && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>moving.classList.contains(kind))) {
+          const next = {...positionsRef.current};
+          const origin = drag.origins[drag.ids[0]!];
+          if (origin) next[drag.ids[0]!] = origin;
+          setPositions(next);
+        }
       }
       snapGhostRef.current = null;
       setSnapGhost(null);
