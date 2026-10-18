@@ -6,7 +6,7 @@ import { compile, compileAssembly, runProgram, type Block, type BlockKind, type 
 const initialBlocks: Block[] = [
   { id: "b1", kind: "print", value: "Hello from Blorrl!" },
   { id: "b2", kind: "let", name: "answer", value: "42", types: ["number"] },
-  { id: "b3", kind: "get", value: "answer" },
+  { id: "b3", kind: "print", value: "", valueBlock: { id: "b3-value", kind: "get", value: "answer" } },
 ];
 const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "print", label: "Print", hint: "Write a value to terminal" },
