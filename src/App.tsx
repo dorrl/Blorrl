@@ -6,6 +6,8 @@ import { BlockLibrary } from "./components/BlockLibrary";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
+import { allBlocks, putCondition, putValue, removeIds } from "./editor/blockTree";
+import { useCanvasPan } from "./editor/useCanvasPan";
 
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
@@ -26,7 +28,6 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(220);
   const [spaceDown, setSpaceDown] = useState(false);
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
-  const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const [dragPreview, setDragPreview] = useState<{ids:string[];dx:number;dy:number}|null>(null);
@@ -39,9 +40,9 @@ export default function App() {
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const canvasRef = useRef<HTMLDivElement>(null);
+  const { startCanvasGesture, moveCanvasGesture, endCanvasGesture } = useCanvasPan(canvasRef, spaceDown);
   const compiled = useMemo(() => compile(blocks), [blocks]);
   const assemblyCompiled = useMemo(() => compileAssembly(blocks), [blocks]);
-  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...(b.valueBlock ? allBlocks([b.valueBlock]) : []), ...(b.rightBlock ? allBlocks([b.rightBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
   const totalBlocks = allBlocks(blocks).length;
 
   useEffect(() => {
@@ -265,19 +266,7 @@ export default function App() {
     });
     setSelected([block.id]); setStatus("idle");
   }
-  function removeIds(items: Block[], ids: string[]): Block[] {
-    const removeOne = (block: Block): Block | null => {
-      if (ids.includes(block.id)) return null;
-      return {...block,conditionBlock:block.conditionBlock ? removeOne(block.conditionBlock) ?? undefined : undefined,valueBlock:block.valueBlock ? removeOne(block.valueBlock) ?? undefined : undefined,rightBlock:block.rightBlock ? removeOne(block.rightBlock) ?? undefined : undefined,children:removeIds(block.children ?? [],ids),elseIf:block.elseIf?.map(branch=>({...branch,children:removeIds(branch.children,ids)})),elseChildren:block.elseChildren?removeIds(block.elseChildren,ids):undefined};
-    };
-    return items.map(removeOne).filter((block): block is Block => block !== null);
-  }
-  function putValue(items: Block[], targetId: string, field: "valueBlock" | "rightBlock", valueBlock: Block): Block[] {
-    return items.map(b=>({...b,[field]:b.id===targetId?valueBlock:b[field],conditionBlock:b.conditionBlock?putValue([b.conditionBlock],targetId,field,valueBlock)[0]:undefined,valueBlock:b.id===targetId&&field==="valueBlock"?valueBlock:b.valueBlock?putValue([b.valueBlock],targetId,field,valueBlock)[0]:undefined,rightBlock:b.id===targetId&&field==="rightBlock"?valueBlock:b.rightBlock?putValue([b.rightBlock],targetId,field,valueBlock)[0]:undefined,children:putValue(b.children??[],targetId,field,valueBlock),elseIf:b.elseIf?.map(br=>({...br,children:putValue(br.children,targetId,field,valueBlock)})),elseChildren:b.elseChildren?putValue(b.elseChildren,targetId,field,valueBlock):undefined}));
-  }
-  function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
-    const nested=owner[field];
-    return <div className={"value-slot"+(nested?" filled":"")} data-value-for={owner.id} data-value-field={field} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("value-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("value-hover")} onDrop={e=>{e.currentTarget.classList.remove("value-hover");onDrop(e,`value:${owner.id}:${field}`);}}>{nested?<><span className={"value-chip kind-"+nested.kind} draggable onDragStart={e=>onDragStart(e,{source:"canvas",ids:[nested.id]})}>{renderReporter(nested)}</span><button className="value-remove" aria-label="Remove nested value" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();updateBlock(owner.id,field==="valueBlock"?{valueBlock:undefined}:{rightBlock:undefined});}}>×</button></>:<input className="value-input" aria-label={ariaLabel} value={value} onChange={e=>updateBlock(owner.id,field==="valueBlock"?{value:e.target.value}:{right:e.target.value})} onClick={e=>e.stopPropagation()}/>}</div>;
+tTarget.classList.remove("value-hover")} onDrop={e=>{e.currentTarget.classList.remove("value-hover");onDrop(e,`value:${owner.id}:${field}`);}}>{nested?<><span className={"value-chip kind-"+nested.kind} draggable onDragStart={e=>onDragStart(e,{source:"canvas",ids:[nested.id]})}>{renderReporter(nested)}</span><button className="value-remove" aria-label="Remove nested value" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();updateBlock(owner.id,field==="valueBlock"?{valueBlock:undefined}:{rightBlock:undefined});}}>×</button></>:<input className="value-input" aria-label={ariaLabel} value={value} onChange={e=>updateBlock(owner.id,field==="valueBlock"?{value:e.target.value}:{right:e.target.value})} onClick={e=>e.stopPropagation()}/>}</div>;
   }
   function renderReporter(block: Block): ReactNode {
     if (block.kind === "add" || block.kind === "compare") return <span className={"inline-reporter kind-"+block.kind}><span className="inline-operator-fields">{renderValueSlot(block,"valueBlock",block.value, "Left value")}<select aria-label="Nested operator" value={block.kind==="compare"?block.comparisonOperator??"==":block.operator??"+"} onChange={e=>updateBlock(block.id,block.kind==="compare"?{comparisonOperator:e.target.value as Block["comparisonOperator"]}:{operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}>{block.kind==="compare"?<><option>==</option><option>&gt;=</option><option>&lt;=</option></>:<><option>+</option><option>-</option><option>*</option><option>/</option></>}</select>{renderValueSlot(block,"rightBlock",block.right??(block.kind==="compare"?"0":"1"),"Right value")}</span></span>;
@@ -285,9 +274,6 @@ export default function App() {
     if (block.kind === "true") return "true";
     if (block.kind === "false") return "false";
     return block.kind;
-  }
-  function putCondition(items: Block[], targetId: string, conditionBlock: Block): Block[] {
-    return items.map(b => ({...b, conditionBlock:b.id===targetId ? conditionBlock : b.conditionBlock ? putCondition([b.conditionBlock],targetId,conditionBlock)[0] : undefined, children:putCondition(b.children??[],targetId,conditionBlock), elseIf:b.elseIf?.map(br=>({...br,children:putCondition(br.children,targetId,conditionBlock)})), elseChildren:b.elseChildren?putCondition(b.elseChildren,targetId,conditionBlock):undefined}));
   }
   function dropCondition(targetId: string, child: Block, movingIds: string[] = []) {
     if (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare") return;
@@ -451,23 +437,8 @@ export default function App() {
       }
     } catch { /* Ignore invalid drag payloads. */ }
   }
-  function startCanvasGesture(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!spaceDown && event.button !== 1) return;
-    panOrigin.current={x:event.clientX,y:event.clientY,left:event.currentTarget.scrollLeft,top:event.currentTarget.scrollTop};
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  }
-  function moveCanvasGesture(event: ReactPointerEvent<HTMLDivElement>) {
-    const canvas=canvasRef.current;
-    if (!canvas || !panOrigin.current) return;
-    canvas.scrollLeft=panOrigin.current.left-(event.clientX-panOrigin.current.x);
-    canvas.scrollTop=panOrigin.current.top-(event.clientY-panOrigin.current.y);
-  }
-  function endCanvasGesture() { panOrigin.current=null; }
-  function selectBlock(event: MouseEvent, id: string) {
-    if (event.shiftKey || event.ctrlKey || event.metaKey) {
-      setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
-    } else if (!selected.includes(id)) setSelected([id]);
+  function selectBlock(_event: MouseEvent, id: string) {
+    setSelected([id]);
   }
   function run() {
     setBusy(true);
@@ -546,7 +517,7 @@ export default function App() {
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span><button className="icon-button tab-export" title="Export source" onClick={exportSource}><Download size={15}/></button></div>
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span><button className="icon-button" title="Export source" onClick={exportSource}><Download size={15}/></button></div></div>
-        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag blocks to move them. Shift/Ctrl-click selects multiple blocks. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
+        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag blocks to move them. Only one block can be selected at a time. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
         <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
@@ -557,7 +528,7 @@ export default function App() {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
             e.preventDefault();
             e.stopPropagation();
-            const selectedIds = selected.includes(block.id) ? selected : [block.id];
+            const selectedIds = [block.id];
             const blockIndex = blocks.findIndex(item => item.id === block.id);
             const reporter = ["add","compare","true","false","get"].includes(block.kind);
             // Only carry the contiguous stack physically attached below this block.
@@ -578,7 +549,7 @@ export default function App() {
               }
               return stackIds;
             };
-            const ids = selectedIds.length > 1 ? selectedIds : reporter ? [block.id] : connectedStack(blockIndex);
+            const ids = reporter ? [block.id] : connectedStack(blockIndex);
             if (!selected.includes(block.id)) setSelected(selectedIds);
             const origins: Record<string,{x:number;y:number}> = {};
             ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:90 + blocks.findIndex(item=>item.id===id)*86}; });
