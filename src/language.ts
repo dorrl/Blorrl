@@ -112,7 +112,7 @@ export function compile(blocks: Block[]): Compilation {
           if (block.elseChildren) { lines.push(pad + "else {"); emit(block.elseChildren, depth + 1); lines.push(pad + "}"); }
           break;
         case "repeat":
-          lines.push(pad + "repeat (" + (block.value || "1") + ") {");
+          lines.push(pad + "repeat (" + (block.valueBlock ? blockExpression(block.valueBlock) : block.value || "1") + ") {");
           emit(block.children ?? [], depth + 1); lines.push(pad + "}"); break;
         case "add": lines.push(pad + "print " + blockExpression(block) + ";"); break;
       }
@@ -269,7 +269,7 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
           break;
         }
         case "repeat": {
-          const count = evaluate(block.value || "1", variables);
+          const count = block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : evaluate(block.value || "1", variables);
           if (typeof count !== "number" || !Number.isFinite(count)) throw new Error("Repeat count must be a finite number.");
           for (let i = 0; i < Math.max(0, Math.min(10000, Math.floor(count))); i++) execute(block.children ?? []);
           break;
@@ -457,7 +457,7 @@ export function compileAssembly(blocks: Block[]): Compilation {
           case "repeat": {
             const start = label("loop"), end = label("endloop"), counter = label("counter");
             data.push(counter + ": .quad 0");
-            emitRaw(block.value || "1");
+            if (block.valueBlock) emitValue(block.valueBlock); else emitRaw(block.value || "1");
             code.push("  mov QWORD PTR [rip+" + counter + "], rax", start + ":", "  cmp QWORD PTR [rip+" + counter + "], 0", "  jle " + end, "  cmp QWORD PTR [rip+" + counter + "], 10000", "  jg " + end);
             emit(block.children ?? []);
             code.push("  sub QWORD PTR [rip+" + counter + "], 1", "  jmp " + start, end + ":");
