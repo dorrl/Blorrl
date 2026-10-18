@@ -595,7 +595,20 @@ export default function App() {
         .find((item): item is {id:string;x:number;y:number} => item !== null);
       if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
-    if (isValueReporter) { if (snapGhostRef.current) setSnapGhost(null); snapGhostRef.current = null; return; }
+    // Keep a real, unscaled block under the pointer even before it reaches a
+    // compatible socket. This replaces the browser's native drag screenshot.
+    const freeGhost = () => ({
+      x: event.clientX - canvasRect.left + canvas.scrollLeft - 10,
+      y: event.clientY - canvasRect.top + canvas.scrollTop - 18,
+      count: 1,
+      targetId: "__free__",
+    });
+    if (isValueReporter) {
+      const ghost = freeGhost();
+      if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+      snapGhostRef.current = ghost;
+      return;
+    }
     const candidates: Array<{id:string;x:number;y:number;distance:number}> = [];
     const start = canvas.querySelector<HTMLElement>(".start-node");
     if (start) {
@@ -634,7 +647,7 @@ export default function App() {
       }
     }
     const nearest = candidates.sort((a,b)=>a.distance-b.distance)[0];
-    const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : null;
+    const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : freeGhost();
     const previous = snapGhostRef.current;
     if (!nextGhost || !previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
     snapGhostRef.current = nextGhost;
@@ -650,7 +663,7 @@ export default function App() {
     const ghostTarget = snapGhostRef.current?.targetId;
     const insertionTarget = ghostTarget?.startsWith("__insert__:") ? ghostTarget.slice("__insert__:".length) : undefined;
     const socketTarget = ghostTarget?.startsWith("__value__:") ? `value:${ghostTarget.slice("__value__:".length)}` : ghostTarget?.startsWith("__condition__:") ? `condition:${ghostTarget.slice("__condition__:".length)}` : undefined;
-    const resolvedTargetId = insertionTarget ?? socketTarget ?? targetId;
+    const resolvedTargetId = ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId;
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
