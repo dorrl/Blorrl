@@ -105,7 +105,7 @@ export default function App() {
           return id ? {
             id,
             x: element.offsetLeft,
-            y: element.offsetTop + element.offsetHeight - 8,
+            y: element.offsetTop + element.offsetHeight - 1,
             distance: Math.abs(event.clientY - rect.bottom),
             horizontal: event.clientX >= rect.left - 14 && event.clientX <= rect.right + 14
           } : null;
@@ -118,7 +118,7 @@ export default function App() {
       const startCandidate = startNode && startRect ? {
         id: "__start",
         x: startNode.offsetLeft,
-        y: startNode.offsetTop + startNode.offsetHeight - 8,
+        y: startNode.offsetTop + startNode.offsetHeight - 1,
         distance: Math.abs(event.clientY - startRect.bottom),
         horizontal: event.clientX >= startRect.left - 14 && event.clientX <= startRect.right + 14
       } : null;
@@ -170,7 +170,7 @@ export default function App() {
           drag.ids.forEach(id => delete next[id]);
           setSelected(drag.ids.slice(0,1));
         } else {
-          const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 8, 0);
+          const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
           setBlocks(current => {
             const moving = current.filter(block => drag.ids.includes(block.id));
             const rest = current.filter(block => !drag.ids.includes(block.id));
@@ -185,7 +185,7 @@ export default function App() {
           drag.ids.forEach(id => {
             next[id] = { x: ghost.x, y };
             const movingElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
-            y += (movingElement?.offsetHeight ?? 38) - 8;
+            y += (movingElement?.offsetHeight ?? 38) - 1;
           });
         }
         setPositions(next);
@@ -377,8 +377,8 @@ export default function App() {
         return rest;
       });
       const targetEl = snapped.id==="__start" ? startNode : canvas?.querySelector<HTMLElement>(`[data-block-id="${snapped.id}"]`);
-      let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 8;
-      drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-8; });
+      let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 1;
+      drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-1; });
     }
     setPositions(next);
     setStatus("idle");
