@@ -1,4 +1,4 @@
-export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "add" | "boolean" | "compare";
+export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "add" | "true" | "false" | "compare";
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
@@ -42,7 +42,8 @@ function literalForC(block: Block): string {
   return String(value);
 }
 function conditionExpression(block: Block): string {
-  if (block.kind === "boolean") return block.value === "true" ? "true" : "false";
+  if (block.kind === "true") return "true";
+  if (block.kind === "false") return "false";
   if (block.kind === "compare") return "(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")";
   throw new Error("An if condition needs a true/false or comparison block.");
 }
@@ -69,7 +70,8 @@ export function compile(blocks: Block[]): Compilation {
           break;
         }
         case "get": lines.push(pad + "print " + (block.value || "value") + ";"); break;
-        case "boolean": lines.push(pad + "print " + (block.value === "true" ? "true" : "false") + ";"); break;
+        case "true": lines.push(pad + "print true;"); break;
+        case "false": lines.push(pad + "print false;"); break;
         case "compare": lines.push(pad + "print (" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ");"); break;
         case "if":
           lines.push(pad + "if (" + (block.conditionBlock ? conditionExpression(block.conditionBlock) : "false") + ") {");
@@ -225,7 +227,8 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
           break;
         }
         case "add": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.right || "1") + ")", variables))); break;
-        case "boolean": output.push(block.value === "true" ? "true" : "false"); break;
+        case "true": output.push("true"); break;
+        case "false": output.push("false"); break;
         case "compare": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")", variables))); break;
         case "if": {
           if (Boolean(block.conditionBlock ? evaluate(conditionExpression(block.conditionBlock), variables) : false)) execute(block.children ?? []);
@@ -288,7 +291,8 @@ export function compileC(blocks: Block[]): Compilation {
         if (names.get(name) === "string") lines.push(`${pad}{ static char buf_${name}[4096]; if (fgets(buf_${name}, sizeof(buf_${name}), stdin)) { buf_${name}[strcspn(buf_${name}, "\\n")] = 0; ${name} = buf_${name}; } }`);
         else lines.push(`${pad}scanf("%lf", &${name});`);
       } else if (b.kind === "add") lines.push(`${pad}printf("%.15g\\n", (${expr(b.value || "0")}) ${b.operator ?? "+"} (${expr(b.right || "1")}));`);
-      else if (b.kind === "boolean") lines.push(pad + "printf(\"%s\\n\", " + (b.value === "true" ? "\"true\"" : "\"false\"") + ");");
+      else if (b.kind === "true") lines.push(pad + "printf(\"%s\\n\", \"true\");");
+      else if (b.kind === "false") lines.push(pad + "printf(\"%s\\n\", \"false\");");
       else if (b.kind === "compare") lines.push(pad + "printf(\"%d\\n\", (" + expr(b.value || "0") + ") " + (b.comparisonOperator ?? "==") + " (" + expr(b.right || "0") + "));");
       else if (b.kind === "if") {
         lines.push(pad + "if (" + (b.conditionBlock ? expr(conditionExpression(b.conditionBlock)) : "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
