@@ -138,12 +138,14 @@ export default function App() {
         horizontal: event.clientX >= startRect.left - 14 && event.clientX <= startRect.right + 14
       } : null;
       const canvasRect = canvas.getBoundingClientRect();
-      const conditionCandidate = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
+      const movingElement = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
+      const canBeCondition = !!movingElement && ["kind-true","kind-false","kind-compare"].some(kind => movingElement.classList.contains(kind));
+      const conditionCandidate = canBeCondition ? Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => {
           const rect = slot.getBoundingClientRect();
           const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
           return inside ? {id:"__condition__:"+slot.dataset.conditionFor, x:rect.left-canvasRect.left+canvas.scrollLeft, y:rect.top-canvasRect.top+canvas.scrollTop, distance:0, horizontal:true} : null;
-        }).find(item => item !== null) ?? null;
+        }).find(item => item !== null) ?? null : null;
       const snap = conditionCandidate ?? (startCandidate && startCandidate.distance < 18 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
         : candidate);
