@@ -234,9 +234,9 @@ export function compileC(blocks: Block[]): Compilation {
       } else if (b.kind === "let") lines.push(pad + (b.name?.trim() ?? "value") + " = " + expr(b.value || "0") + ";");
       else if (b.kind === "input") {
         const name = b.name?.trim() ?? "value";
-        if (names.get(name) === "string") lines.push(pad + "{ static char buf_" + name + "[4096]; if (fgets(buf_" + name + ", sizeof(buf_" + name + "), stdin)) { buf_" + name + "[strcspn(buf_" + name + ", \\"\\n\\")] = 0; " + name + " = buf_" + name + "; } }");
-        else lines.push(pad + "scanf(\\"%lf\\", &" + name + ");");
-      } else if (b.kind === "add") lines.push(pad + "printf(\\"%.15g\\n\\", (" + expr(b.value || "0") + ") " + (b.operator ?? "+") + " (" + expr(b.right || "1") + "));");
+        if (names.get(name) === "string") lines.push(`${pad}{ static char buf_${name}[4096]; if (fgets(buf_${name}, sizeof(buf_${name}), stdin)) { buf_${name}[strcspn(buf_${name}, "\\n")] = 0; ${name} = buf_${name}; } }`);
+        else lines.push(`${pad}scanf("%lf", &${name});`);
+      } else if (b.kind === "add") lines.push(`${pad}printf("%.15g\\n", (${expr(b.value || "0")}) ${b.operator ?? "+"} (${expr(b.right || "1")}));`);
       else if (b.kind === "if") {
         lines.push(pad + "if (" + expr(b.value || "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
         for (const br of b.elseIf ?? []) { lines.push(pad+"else if ("+expr(br.condition||"0")+") {");emit(br.children,depth+1);lines.push(pad+"}"); }
