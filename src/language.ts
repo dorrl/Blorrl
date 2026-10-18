@@ -279,6 +279,7 @@ export function compileAssembly(blocks: Block[]): Compilation {
   const data: string[] = [];
   const code: string[] = [];
   let labelIndex = 0;
+  let expressionStackDepth = 0;
   const label = (prefix: string) => ".L" + prefix + "_" + labelIndex++;
   const str = (value: string) => {
     const id = label("str");
@@ -362,10 +363,10 @@ export function compileAssembly(blocks: Block[]): Compilation {
     if (block.kind === "add") {
       const leftType = block.valueBlock ? emitValue(block.valueBlock) : inferRawType(block.value);
       if (!block.valueBlock) emitRaw(block.value || "0");
-      code.push("  push rax");
+      code.push("  push rax"); expressionStackDepth++;
       const rightType = block.rightBlock ? emitValue(block.rightBlock) : inferRawType(block.right ?? "1");
       if (!block.rightBlock) emitRaw(block.right || "1");
-      code.push("  mov rcx, rax", "  pop rax");
+      code.push("  mov rcx, rax", "  pop rax"); expressionStackDepth--;
       switch (block.operator ?? "+") {
         case "+": code.push("  add rax, rcx"); break;
         case "-": code.push("  sub rax, rcx"); break;
@@ -378,13 +379,15 @@ export function compileAssembly(blocks: Block[]): Compilation {
     if (block.kind === "compare") {
       const leftType = block.valueBlock ? emitValue(block.valueBlock) : inferRawType(block.value);
       if (!block.valueBlock) emitRaw(block.value || "0");
-      code.push("  push rax");
+      code.push("  push rax"); expressionStackDepth++;
       const rightType = block.rightBlock ? emitValue(block.rightBlock) : inferRawType(block.right ?? "0");
       if (!block.rightBlock) emitRaw(block.right || "0");
       if (leftType === "string" || rightType === "string") {
-        code.push("  mov rdx, rax", "  pop rcx", "  sub rsp, 32", "  call strcmp", "  add rsp, 32", "  cmp eax, 0");
+        expressionStackDepth--;
+        const shadowSpace = expressionStackDepth % 2 === 0 ? 32 : 40;
+        code.push("  mov rdx, rax", "  pop rcx", "  sub rsp, " + shadowSpace, "  call strcmp", "  add rsp, " + shadowSpace, "  cmp eax, 0");
       } else {
-        code.push("  mov rcx, rax", "  pop rax", "  cmp rax, rcx");
+        code.push("  mov rcx, rax", "  pop rax", "  cmp rax, rcx"); expressionStackDepth--;
       }
       code.push(block.comparisonOperator === ">=" ? "  setge al" : block.comparisonOperator === "<=" ? "  setle al" : "  sete al", "  movzx rax, al");
       return "boolean";
