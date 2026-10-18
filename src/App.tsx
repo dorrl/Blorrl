@@ -61,7 +61,7 @@ export default function App() {
       if (event.code === "Space" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) { setSpaceDown(true); event.preventDefault(); }
       if ((event.key === "Delete" || event.key === "Backspace") && selected.length && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
         event.preventDefault();
-        const remove = (items: Block[]): Block[] => items.filter(b => !selected.includes(b.id)).map(b => ({...b,children:remove(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:remove(br.children)})),elseChildren:b.elseChildren?remove(b.elseChildren):undefined}));
+        const remove = (items: Block[]): Block[] => items.filter(b => !selected.includes(b.id)).map(b => ({...b,conditionBlock:b.conditionBlock && !selected.includes(b.conditionBlock.id) ? b.conditionBlock : undefined,children:remove(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:remove(br.children)})),elseChildren:b.elseChildren?remove(b.elseChildren):undefined}));
         setBlocks(current=>remove(current));setSelected([]);setStatus("idle");
       }
     };
