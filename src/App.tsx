@@ -21,7 +21,6 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
-  const [marquee, setMarquee] = useState<{x:number;y:number;w:number;h:number}|null>(null);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
   const [sidebarWidth, setSidebarWidth] = useState(220);
@@ -40,7 +39,6 @@ export default function App() {
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const canvasRef = useRef<HTMLDivElement>(null);
-  const marqueeStart = useRef<{x:number;y:number}|null>(null);
   const compiled = useMemo(() => compile(blocks), [blocks]);
   const assemblyCompiled = useMemo(() => compileAssembly(blocks), [blocks]);
   const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...(b.valueBlock ? allBlocks([b.valueBlock]) : []), ...(b.rightBlock ? allBlocks([b.rightBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
@@ -453,30 +451,19 @@ export default function App() {
       }
     } catch { /* Ignore invalid drag payloads. */ }
   }
-  function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
-    if (spaceDown || event.button===1) {
-      panOrigin.current={x:event.clientX,y:event.clientY,left:event.currentTarget.scrollLeft,top:event.currentTarget.scrollTop};
-      event.currentTarget.setPointerCapture(event.pointerId);event.preventDefault();return;
-    }
-    if ((event.target as HTMLElement).closest(".block-card,button,input,textarea,select,.start-node")) return;
-    const rect=event.currentTarget.getBoundingClientRect();
-    const point={x:event.clientX-rect.left+event.currentTarget.scrollLeft,y:event.clientY-rect.top+event.currentTarget.scrollTop};
-    marqueeStart.current=point;setMarquee({...point,w:0,h:0});event.currentTarget.setPointerCapture(event.pointerId);
+  function startCanvasGesture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!spaceDown && event.button !== 1) return;
+    panOrigin.current={x:event.clientX,y:event.clientY,left:event.currentTarget.scrollLeft,top:event.currentTarget.scrollTop};
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
   }
-  function moveMarquee(event: ReactPointerEvent<HTMLDivElement>) {
-    const canvas=canvasRef.current;if(!canvas)return;
-    if(panOrigin.current){canvas.scrollLeft=panOrigin.current.left-(event.clientX-panOrigin.current.x);canvas.scrollTop=panOrigin.current.top-(event.clientY-panOrigin.current.y);return;}
-    if(!marqueeStart.current)return;
-    const rect=canvas.getBoundingClientRect();
-    const x=event.clientX-rect.left+canvas.scrollLeft,y=event.clientY-rect.top+canvas.scrollTop,start=marqueeStart.current;
-    const box={x:Math.min(start.x,x),y:Math.min(start.y,y),w:Math.abs(x-start.x),h:Math.abs(y-start.y)};setMarquee(box);
-    const ids=Array.from(canvas.querySelectorAll<HTMLElement>("[data-block-id]")).filter(el=>{
-      const r=el.getBoundingClientRect(),left=r.left-rect.left+canvas.scrollLeft,top=r.top-rect.top+canvas.scrollTop;
-      return left<box.x+box.w&&left+r.width>box.x&&top<box.y+box.h&&top+r.height>box.y;
-    }).map(el=>el.dataset.blockId!).filter(Boolean);
-    setSelected(ids);
+  function moveCanvasGesture(event: ReactPointerEvent<HTMLDivElement>) {
+    const canvas=canvasRef.current;
+    if (!canvas || !panOrigin.current) return;
+    canvas.scrollLeft=panOrigin.current.left-(event.clientX-panOrigin.current.x);
+    canvas.scrollTop=panOrigin.current.top-(event.clientY-panOrigin.current.y);
   }
-  function endMarquee() { marqueeStart.current=null;panOrigin.current=null;setMarquee(null); }
+  function endCanvasGesture() { panOrigin.current=null; }
   function selectBlock(event: MouseEvent, id: string) {
     if (event.shiftKey || event.ctrlKey || event.metaKey) {
       setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
@@ -559,9 +546,9 @@ export default function App() {
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span><button className="icon-button tab-export" title="Export source" onClick={exportSource}><Download size={15}/></button></div>
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span><button className="icon-button" title="Export source" onClick={exportSource}><Download size={15}/></button></div></div>
-        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag empty space to select blocks. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
-        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
-          <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG EMPTY SPACE TO SELECT"}</span></div>
+        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag blocks to move them. Shift/Ctrl-click selects multiple blocks. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
+        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
+          <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
@@ -627,7 +614,7 @@ export default function App() {
             </article>)}
           {snapGhost && <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
-          {marquee && <div className="selection-marquee" style={{left:marquee.x,top:marquee.y,width:marquee.w,height:marquee.h}}/>}
+          
         </div>
         <div className="editor-footer"><span><span className="footer-dot"/> {selected.length} selected <span className="footer-separator">·</span> {totalBlocks} blocks in flow</span><span>SPACE + DRAG TO PAN · DELETE TO REMOVE</span></div>
       </section>
