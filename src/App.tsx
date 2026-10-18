@@ -363,7 +363,14 @@ export default function App() {
     const targetPosition = beforeId === "__start" ? {x:42,y:38} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
     const targetElement = beforeId === "__start" ? canvasRef.current?.querySelector<HTMLElement>(".start-node") : beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
     const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
-    const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;
+    const preview = document.querySelector<HTMLElement>(`.library-block-preview.kind-${kind}`);
+    const measuredHeight = preview ? Number.parseFloat(getComputedStyle(preview).height) : Number.NaN;
+    const blockHeight = Number.isFinite(measuredHeight) && measuredHeight > 0
+      ? measuredHeight
+      : kind === "if" || kind === "repeat" ? 90
+      : kind === "compare" ? 42
+      : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38
+      : 88;
     setPositions(current => {
       const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
       if (beforeId && targetPosition) {
