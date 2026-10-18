@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { Play, Hammer, Plus, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 
@@ -270,7 +270,7 @@ export default function App() {
     const nested=owner[field];
     return <div className={"value-slot"+(nested?" filled":"")} data-value-for={owner.id} data-value-field={field} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("value-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("value-hover")} onDrop={e=>{e.currentTarget.classList.remove("value-hover");onDrop(e,`value:${owner.id}:${field}`);}}>{nested?<><span className={"value-chip kind-"+nested.kind} draggable onDragStart={e=>onDragStart(e,{source:"canvas",ids:[nested.id]})}>{renderReporter(nested)}</span><button className="value-remove" aria-label="Remove nested value" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();updateBlock(owner.id,{[field]:undefined});}}>×</button></>:<input className="value-input" aria-label={ariaLabel} value={value} onChange={e=>updateBlock(owner.id,{[field==="valueBlock"?"value":"right"]:e.target.value})} onClick={e=>e.stopPropagation()}/>}</div>;
   }
-  function renderReporter(block: Block): React.ReactNode {
+  function renderReporter(block: Block): ReactNode {
     if (block.kind === "add" || block.kind === "compare") return <span className={"inline-reporter kind-"+block.kind}><span className="inline-operator-fields">{renderValueSlot(block,"valueBlock",block.value, "Left value")}<select aria-label="Nested operator" value={block.kind==="compare"?block.comparisonOperator??"==":block.operator??"+"} onChange={e=>updateBlock(block.id,block.kind==="compare"?{comparisonOperator:e.target.value as Block["comparisonOperator"]}:{operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}>{block.kind==="compare"?<><option>==</option><option>&gt;=</option><option>&lt;=</option></>:<><option>+</option><option>-</option><option>*</option><option>/</option></>}</select>{renderValueSlot(block,"rightBlock",block.right??(block.kind==="compare"?"0":"1"),"Right value")}</span></span>;
     if (block.kind === "get") return <span className="inline-get">get <input aria-label="Variable name" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()}/></span>;
     if (block.kind === "true") return "true";
