@@ -7,6 +7,8 @@ import { ReporterContent } from "./editor/blocks/ReporterContent";
 import { PrintBlock } from "./editor/blocks/PrintBlock";
 import { VariableBlock } from "./editor/blocks/VariableBlock";
 import { InputBlock } from "./editor/blocks/InputBlock";
+import { IfConditionField } from "./editor/blocks/IfConditionField";
+import { RepeatBlock } from "./editor/blocks/RepeatBlock";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
@@ -595,8 +597,8 @@ export default function App() {
                   {block.kind === "input" && <InputBlock block={block} updateBlock={updateBlock} typePanelOpen={typePanelFor === block.id} onToggleTypePanel={() => setTypePanelFor(typePanelFor === block.id ? null : block.id)} onUpdateType={updateType} />}
                   {block.kind === "print" && <PrintBlock block={block} renderValueSlot={renderValueSlot} />}
                   {(block.kind === "get" || block.kind === "add" || block.kind === "compare") && <ReporterContent block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
-                  {block.kind === "if" && <div className="condition-slot" data-condition-for={block.id} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("condition-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("condition-hover")} onDrop={e=>{e.currentTarget.classList.remove("condition-hover");onDrop(e,"condition:"+block.id);}}><span className="condition-caption">IF</span>{block.conditionBlock ? block.conditionBlock.kind==="compare" ? <>{renderValueSlot(block.conditionBlock,"valueBlock",block.conditionBlock.value,"Left condition value")}<select aria-label="Condition operator" value={block.conditionBlock.comparisonOperator??"=="} onChange={e=>updateBlock(block.conditionBlock!.id,{comparisonOperator:e.target.value as Block["comparisonOperator"]})}><option>==</option><option>&gt;=</option><option>&lt;=</option></select>{renderValueSlot(block.conditionBlock,"rightBlock",block.conditionBlock.right??"0","Right condition value")}</> : <strong>{block.conditionBlock.kind==="true"?"True":"False"}</strong> : <span>Drop True / False / ==</span>}</div>}
-                  {block.kind === "repeat" && <label>COUNT{renderValueSlot(block,"valueBlock",block.value,"Repeat count")}</label>}
+                  {block.kind === "if" && <IfConditionField block={block} updateBlock={updateBlock} renderValueSlot={renderValueSlot} onDrop={onDrop} />}
+                  {block.kind === "repeat" && <RepeatBlock block={block} renderValueSlot={renderValueSlot} />}
                   
                   {(block.kind === "true" || block.kind === "false") && <span className="field-hint">{block.kind === "true" ? "Always true" : "Always false"}</span>}
                 </div>
