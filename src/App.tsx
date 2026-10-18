@@ -322,7 +322,7 @@ export default function App() {
       const sourceWidth = getComputedStyle(source).width;
       Object.assign(ghost.style, {
         position: "relative", left: "auto", top: "auto", transform: "none",
-        width: sourceWidth, maxWidth: "none", minWidth: "0",
+        width: sourceWidth, maxWidth: "", minWidth: "0",
         minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
       container.appendChild(ghost);
