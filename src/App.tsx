@@ -366,7 +366,8 @@ export default function App() {
     const targetElement = beforeId === "__start" ? canvasRef.current?.querySelector<HTMLElement>(".start-node") : beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
     const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
     const preview = document.querySelector<HTMLElement>(`.library-block-preview.kind-${kind}`);
-    const measuredHeight = preview ? Number.parseFloat(getComputedStyle(preview).height) : Number.NaN;
+    const previewScale = preview ? Number.parseFloat(getComputedStyle(preview).getPropertyValue("--palette-preview-scale")) || 1 : 1;
+    const measuredHeight = preview ? preview.getBoundingClientRect().height / previewScale : Number.NaN;
     const blockHeight = Number.isFinite(measuredHeight) && measuredHeight > 0
       ? measuredHeight
       : kind === "if" || kind === "repeat" ? 90
