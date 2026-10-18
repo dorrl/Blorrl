@@ -2140,9 +2140,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .catalog-item:hover .library-block-preview { filter:brightness(1.12); }
 
 
-/* Palette cards use the same block components and intrinsic proportions as canvas cards.
-   A single scale is derived from the sidebar width and applied uniformly to every block.
-   The ghost removes this presentation scale and uses the canvas block rules. */
+/* Palette cards use the same unscaled dimensions and component layout as canvas cards. */
 .catalog-item {
   display: block;
   position: relative;
@@ -2166,21 +2164,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   position: relative;
   left: auto;
   top: auto;
-  width: max-content;
+  /* The sidebar scrolls; it never constrains a block's intrinsic layout. */
   max-width: none;
-  --palette-preview-scale: .58;
   margin: 0;
-  transform: none;
-  zoom: var(--palette-preview-scale);
-  transform-origin: top left;
   box-sizing: border-box;
   pointer-events: none;
-}
-.block-card.library-block-preview.kind-add,
-.block-card.library-block-preview.kind-compare,
-.block-card.library-block-preview.kind-get {
-  width: max-content;
-  max-width: 520px;
 }
 .library-block-preview .block-gutter { min-width: 29px; }
 .library-block-preview .block-fields { white-space: nowrap; }

@@ -42,8 +42,6 @@ export default function App() {
       return 220;
     }
   });
-  // Keep one uniform preview scale based on the sidebar width, not per-block fitting.
-  const palettePreviewScale = Math.max(0.42, Math.min(0.95, 0.58 * sidebarWidth / 220));
   const [spaceDown, setSpaceDown] = useState(false);
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
@@ -51,6 +49,7 @@ export default function App() {
   const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
   const [libraryDragKind, setLibraryDragKind] = useState<BlockKind | null>(null);
+  const libraryDragKindRef = useRef<BlockKind | null>(null);
   const snapGhostContentRef = useRef<HTMLDivElement>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
@@ -328,7 +327,16 @@ export default function App() {
     if (libraryDragKind) {
       const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
-      const ghost = source.cloneNode(true) as HTMLElement;
+      const isValueTarget = snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:");
+      const ghost = isValueTarget ? document.createElement("span") : source.cloneNode(true) as HTMLElement;
+      if (isValueTarget) {
+        ghost.className = `value-chip kind-${libraryDragKind}`;
+        if (libraryDragKind === "true" || libraryDragKind === "false") ghost.textContent = libraryDragKind;
+        else {
+          const reporter = source.querySelector<HTMLElement>(".inline-reporter, .inline-get");
+          if (reporter) ghost.appendChild(reporter.cloneNode(true));
+        }
+      }
       ghost.classList.remove("selected", "library-block-preview");
       ghost.setAttribute("aria-hidden", "true");
       ghost.setAttribute("inert", "");
@@ -336,13 +344,9 @@ export default function App() {
         element.setAttribute("disabled", "");
         element.setAttribute("tabindex", "-1");
       });
-      // The palette is only a scaled presentation. Once its palette class is
-      // removed, let the same .block-card/.kind-* canvas rules determine the
-      // ghost's intrinsic dimensions; never copy the scaled width into the ghost.
-      ghost.style.removeProperty("--palette-preview-scale");
       Object.assign(ghost.style, {
         position: "relative", left: "auto", top: "auto", transform: "none", zoom: "1",
-        width: "", maxWidth: `${Math.max(1, Math.min(560, canvasRef.current!.clientWidth - 24))}px`, minWidth: "",
+        width: "", maxWidth: "", minWidth: "",
         minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
       container.appendChild(ghost);
@@ -511,10 +515,19 @@ export default function App() {
     event.dataTransfer.effectAllowed = payload.source === "library" ? "copy" : "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "library") {
+      // Suppress the browser's screenshot-like native drag image; the canvas
+      // ghost is the only preview users should see.
+      const dragImage = document.createElement("div");
+      dragImage.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0";
+      document.body.appendChild(dragImage);
+      event.dataTransfer.setDragImage(dragImage, 0, 0);
+      requestAnimationFrame(() => dragImage.remove());
+      libraryDragKindRef.current = payload.kind;
       setLibraryDragKind(payload.kind);
       snapGhostRef.current = null;
       setSnapGhost(null);
     } else {
+      libraryDragKindRef.current = null;
       setLibraryDragKind(null);
     }
     if (payload.source === "canvas") {
@@ -561,11 +574,28 @@ export default function App() {
     setStatus("idle");
   }
   function handleLibraryDragOver(event: DragEvent<HTMLElement>) {
-    if (!libraryDragKind || !event.dataTransfer.types.includes("application/x-blorrl")) return;
+    const kind = libraryDragKindRef.current;
+    if (!kind || !event.dataTransfer.types.includes("application/x-blorrl")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const isValueReporter = ["add", "compare", "true", "false", "get"].includes(kind);
+    const isConditionReporter = ["compare", "true", "false"].includes(kind);
+    if (isValueReporter) {
+      const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; return inside ? {id:`__value__:${slot.dataset.valueFor}:${slot.dataset.valueField}`,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2,area:rect.width*rect.height} : null; })
+        .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
+      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+    }
+    if (isConditionReporter) {
+      const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; return inside ? {id:`__condition__:${slot.dataset.conditionFor}`,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2} : null; })
+        .find((item): item is {id:string;x:number;y:number} => item !== null);
+      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+    }
+    if (isValueReporter) { if (snapGhostRef.current) setSnapGhost(null); snapGhostRef.current = null; return; }
     const candidates: Array<{id:string;x:number;y:number;distance:number}> = [];
     const start = canvas.querySelector<HTMLElement>(".start-node");
     if (start) {
@@ -610,14 +640,18 @@ export default function App() {
     snapGhostRef.current = nextGhost;
   }
   function onLibraryDragEnd() {
+    libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     snapGhostRef.current = null;
     setSnapGhost(null);
   }
   function onDrop(event: DragEvent, targetId?: string) {
     event.preventDefault(); event.stopPropagation();
-    const insertionTarget = snapGhostRef.current?.targetId.startsWith("__insert__:") ? snapGhostRef.current.targetId.slice("__insert__:".length) : undefined;
-    const resolvedTargetId = insertionTarget ?? targetId;
+    const ghostTarget = snapGhostRef.current?.targetId;
+    const insertionTarget = ghostTarget?.startsWith("__insert__:") ? ghostTarget.slice("__insert__:".length) : undefined;
+    const socketTarget = ghostTarget?.startsWith("__value__:") ? `value:${ghostTarget.slice("__value__:".length)}` : ghostTarget?.startsWith("__condition__:") ? `condition:${ghostTarget.slice("__condition__:".length)}` : undefined;
+    const resolvedTargetId = insertionTarget ?? socketTarget ?? targetId;
+    libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
     try {
@@ -643,14 +677,20 @@ export default function App() {
       const isReporter = movingKinds.some(kind=>reporterKinds.includes(kind));
       const target=resolvedTargetId ? allBlocks(blocks).find(b=>b.id===resolvedTargetId) : undefined;
       const branchTarget=!!resolvedTargetId && allBlocks(blocks).some(b=>b.elseId===resolvedTargetId||(b.elseIf??[]).some(br=>br.id===resolvedTargetId));
-      if (!insertionTarget && resolvedTargetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
+      if (!isReporter && !insertionTarget && resolvedTargetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
         if(payload.source==="library") insertNested(resolvedTargetId,createBlock(payload.kind));
         else nestBlocks(resolvedTargetId,payload.ids);
       } else {
         const rect=canvasRef.current?.getBoundingClientRect();
         const point=rect&&canvasRef.current?{x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)}:undefined;
         if (payload.source === "library") {
-          addBlock(payload.kind, resolvedTargetId, point);
+          if (isReporter && point) {
+            const child = createBlock(payload.kind);
+            setBlocks(current => [...current, child]);
+            setPositions(current => ({...current,[child.id]:point}));
+            setSelected([child.id]);
+            setStatus("idle");
+          } else addBlock(payload.kind, resolvedTargetId, point);
         } else if (isReporter) {
           const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
           if (child && point) {
@@ -746,7 +786,7 @@ export default function App() {
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
         <div className="file-row"><span className="file-glyph">B</span><span>main.blorr</span><span className="file-unsaved"/></div>
-        <BlockLibrary query={query} previewScale={palettePreviewScale} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onDragEnd={onLibraryDragEnd} onAddBlock={addBlock} />
+        <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onDragEnd={onLibraryDragEnd} onAddBlock={addBlock} />
       </aside>
       <div className="sidebar-resizer" role="separator" aria-label="Resize sidebar" title="Drag to resize sidebar" onPointerDown={e=>{e.preventDefault();sidebarResizeOrigin.current={x:e.clientX,width:sidebarWidth};document.body.classList.add("resizing-sidebar");}}><span/></div>
       <section className="editor">
@@ -816,7 +856,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (snapGhost.targetId.startsWith("__value__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
+          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>
