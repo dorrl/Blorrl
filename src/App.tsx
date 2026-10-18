@@ -17,6 +17,8 @@ const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "add", label: "Add", hint: "Add two numbers" },
 ];
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
+type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
+type SnapGhost = { x: number; y: number; count: number; targetId: string };
 
 export default function App() {
   const [blocks, setBlocks] = useState(initialBlocks);
@@ -33,7 +35,7 @@ export default function App() {
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
   const [spaceDown, setSpaceDown] = useState(false);
   const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
-  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);
+  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);\n  const blockPointerDrag = useRef<BlockPointerDrag | null>(null);\n  const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);\n  const snapGhostRef = useRef<SnapGhost | null>(null);\n  snapGhostRef.current = snapGhost;
   const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
@@ -86,6 +88,91 @@ export default function App() {
       .catch(() => { if (active) setServerOnline(false); });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    const handleBlockPointerMove = (event: PointerEvent) => {
+      const drag = blockPointerDrag.current;
+      const canvas = canvasRef.current;
+      if (!drag || !canvas || event.pointerId !== drag.pointerId) return;
+
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
+      drag.ids.forEach(id => {
+        const origin = drag.origins[id];
+        if (origin) next[id] = { x: Math.max(12, origin.x + dx), y: Math.max(64, origin.y + dy) };
+      });
+      setPositions(next);
+
+      const candidate = Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
+        .filter(element => !drag.ids.includes(element.dataset.blockId ?? ""))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          const id = element.dataset.blockId;
+          return id ? {
+            id,
+            x: element.offsetLeft,
+            y: element.offsetTop + element.offsetHeight - 8,
+            distance: Math.hypot(event.clientX - (rect.left + rect.width / 2), event.clientY - rect.bottom)
+          } : null;
+        })
+        .filter((item): item is { id: string; x: number; y: number; distance: number } => item !== null && item.distance < 70)
+        .sort((a, b) => a.distance - b.distance)[0];
+
+      const startNode = canvas.querySelector<HTMLElement>(".start-node");
+      const startRect = startNode?.getBoundingClientRect();
+      const startCandidate = startNode && startRect ? {
+        id: "__start",
+        x: startNode.offsetLeft,
+        y: startNode.offsetTop + startNode.offsetHeight - 8,
+        distance: Math.hypot(event.clientX - (startRect.left + startRect.width / 2), event.clientY - startRect.bottom)
+      } : null;
+      const snap = startCandidate && startCandidate.distance < 70 && (!candidate || startCandidate.distance < candidate.distance)
+        ? startCandidate
+        : candidate;
+      const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
+      snapGhostRef.current = ghost;
+      setSnapGhost(ghost);
+      if (Math.hypot(dx, dy) > 3) event.preventDefault();
+    };
+
+    const handleBlockPointerUp = (event: PointerEvent) => {
+      const drag = blockPointerDrag.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      blockPointerDrag.current = null;
+      const ghost = snapGhostRef.current;
+      if (ghost) {
+        const canvas = canvasRef.current;
+        setBlocks(current => {
+          const moving = current.filter(block => drag.ids.includes(block.id));
+          const rest = current.filter(block => !drag.ids.includes(block.id));
+          const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
+          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
+          return rest;
+        });
+        const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
+        let y = ghost.y;
+        drag.ids.forEach(id => {
+          next[id] = { x: ghost.x, y };
+          const movingElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
+          y += (movingElement?.offsetHeight ?? 88) - 8;
+        });
+        setPositions(next);
+        setStatus("idle");
+      }
+      snapGhostRef.current = null;
+      setSnapGhost(null);
+    };
+
+    window.addEventListener("pointermove", handleBlockPointerMove);
+    window.addEventListener("pointerup", handleBlockPointerUp);
+    window.addEventListener("pointercancel", handleBlockPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handleBlockPointerMove);
+      window.removeEventListener("pointerup", handleBlockPointerUp);
+      window.removeEventListener("pointercancel", handleBlockPointerUp);
+    };
+  }, []);
+
 
   function updateBlock(id: string, patch: Partial<Block>) {
     const update = (items: Block[]): Block[] => items.map(block => block.id === id ? {...block,...patch} : ({
@@ -317,7 +404,19 @@ export default function App() {
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} draggable style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86)}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClick={e => selectBlock(e,block.id)} onDragStart={e => onDragStart(e,{source:"canvas",ids:selected.includes(block.id) ? selected : [block.id]})} onDragEnd={e => onBlockDragEnd(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onPointerDown={e => {
+            if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const ids = selected.includes(block.id) ? selected : [block.id];
+            if (!selected.includes(block.id)) setSelected(ids);
+            const origins: Record<string,{x:number;y:number}> = {};
+            ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:104 + blocks.findIndex(item=>item.id===id)*104}; });
+            blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
+            snapGhostRef.current = null;
+            setSnapGhost(null);
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          }} onClick={e => selectBlock(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
@@ -340,6 +439,7 @@ export default function App() {
                 </div>}
               </div>
             </article>)}
+          {snapGhost && <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           {marquee && <div className="selection-marquee" style={{left:marquee.x,top:marquee.y,width:marquee.w,height:marquee.h}}/>}
         </div>
