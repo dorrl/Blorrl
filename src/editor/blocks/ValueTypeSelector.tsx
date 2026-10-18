@@ -15,7 +15,7 @@ export function ValueTypeSelector({
   onToggle,
   onUpdateType,
 }: ValueTypeSelectorProps) {
-  const types = block.types ?? ["number"];
+  const types: ValueType[] = block.types ?? ["number"];
 
   return (
     <>
