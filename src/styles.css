@@ -45,3 +45,37 @@
 .nested-item input { min-width: 55px; width: 76px; max-width: 100px; padding: 3px 5px; border: 1px solid #ffffff65; border-radius: 3px; background: #ffffffed; color: #26313a; font: 9px var(--mono); }
 .nested-item .nested-expression { margin-left: auto; }
 .nested-item input:focus { outline: 2px solid #8cc8ff; }
+
+
+/* Direct block dragging: only the valid snap destination gets a ghost preview. */
+.block-card { -webkit-user-drag: none; }
+.snap-ghost {
+  position: absolute;
+  z-index: 7;
+  width: 330px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 2px dashed #b5ddff;
+  border-radius: 7px;
+  background: #8cc8ff22;
+  color: #cce8ff;
+  font: 9px var(--mono);
+  letter-spacing: .7px;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px #8cc8ff12;
+}
+.snap-ghost > span {
+  display: block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #8cc8ff;
+  box-shadow: 0 0 9px #8cc8ff;
+}
+@media(max-width:760px) {
+  .snap-ghost { width: 290px; min-height: 48px; }
+}
