@@ -1,6 +1,22 @@
 import type { Block } from "../language";
 
-export const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...(b.valueBlock ? allBlocks([b.valueBlock]) : []), ...(b.rightBlock ? allBlocks([b.rightBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
+export const allBlocks = (items: Block[]): Block[] => {
+  const found = new Map<string, Block>();
+  const visit = (blocks: Block[]) => {
+    for (const block of blocks) {
+      if (found.has(block.id)) continue;
+      found.set(block.id, block);
+      if (block.conditionBlock) visit([block.conditionBlock]);
+      if (block.valueBlock) visit([block.valueBlock]);
+      if (block.rightBlock) visit([block.rightBlock]);
+      visit(block.children ?? []);
+      for (const branch of block.elseIf ?? []) visit(branch.children);
+      visit(block.elseChildren ?? []);
+    }
+  };
+  visit(items);
+  return [...found.values()];
+};
 
 export function removeIds(items: Block[], ids: string[]): Block[] {
     const removeOne = (block: Block): Block | null => {
