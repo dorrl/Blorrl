@@ -281,7 +281,8 @@ export default function App() {
       ghost.className = `block-card ${categoryClass(libraryDragKind)} kind-${libraryDragKind}`;
       ghost.setAttribute("aria-hidden", "true");
       ghost.setAttribute("inert", "");
-      Object.assign(ghost.style, { position: "relative", left: "auto", top: "auto", width: "280px", minHeight: "42px", boxSizing: "border-box", pointerEvents: "none" });
+      const canvasWidth = canvasRef.current.clientWidth;
+      Object.assign(ghost.style, { position: "relative", left: "auto", top: "auto", width: "max-content", maxWidth: `${Math.max(0, canvasWidth - 24)}px`, minWidth: "0", minHeight: "0", boxSizing: "border-box", pointerEvents: "none" });
       const gutter = document.createElement("div");
       gutter.className = "block-gutter";
       const gutterMark = document.createElement("span");
