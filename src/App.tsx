@@ -61,8 +61,7 @@ export default function App() {
       if (event.code === "Space" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) { setSpaceDown(true); event.preventDefault(); }
       if ((event.key === "Delete" || event.key === "Backspace") && selected.length && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
         event.preventDefault();
-        const remove = (items: Block[]): Block[] => items.filter(b => !selected.includes(b.id)).map(b => ({...b,conditionBlock:b.conditionBlock && !selected.includes(b.conditionBlock.id) ? b.conditionBlock : undefined,valueBlock:b.valueBlock && !selected.includes(b.valueBlock.id) ? b.valueBlock : undefined,rightBlock:b.rightBlock && !selected.includes(b.rightBlock.id) ? b.rightBlock : undefined,children:remove(b.children??[]),elseIf:b.elseIf?.map(br=>({...br,children:remove(br.children)})),elseChildren:b.elseChildren?remove(b.elseChildren):undefined}));
-        setBlocks(current=>remove(current));setSelected([]);setStatus("idle");
+        setBlocks(current=>removeIds(current,selected));setSelected([]);setStatus("idle");
       }
     };
     const up = (event: globalThis.KeyboardEvent) => {if(event.code==="Space")setSpaceDown(false);};
@@ -261,7 +260,11 @@ export default function App() {
     setSelected([block.id]); setStatus("idle");
   }
   function removeIds(items: Block[], ids: string[]): Block[] {
-    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, conditionBlock:b.conditionBlock && !ids.includes(b.conditionBlock.id) ? b.conditionBlock : undefined, valueBlock:b.valueBlock && !ids.includes(b.valueBlock.id) ? b.valueBlock : undefined, rightBlock:b.rightBlock && !ids.includes(b.rightBlock.id) ? b.rightBlock : undefined, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
+    const removeOne = (block: Block): Block | null => {
+      if (ids.includes(block.id)) return null;
+      return {...block,conditionBlock:block.conditionBlock ? removeOne(block.conditionBlock) ?? undefined : undefined,valueBlock:block.valueBlock ? removeOne(block.valueBlock) ?? undefined : undefined,rightBlock:block.rightBlock ? removeOne(block.rightBlock) ?? undefined : undefined,children:removeIds(block.children ?? [],ids),elseIf:block.elseIf?.map(branch=>({...branch,children:removeIds(branch.children,ids)})),elseChildren:block.elseChildren?removeIds(block.elseChildren,ids):undefined};
+    };
+    return items.map(removeOne).filter((block): block is Block => block !== null);
   }
   function putValue(items: Block[], targetId: string, field: "valueBlock" | "rightBlock", valueBlock: Block): Block[] {
     return items.map(b=>({...b,[field]:b.id===targetId?valueBlock:b[field],conditionBlock:b.conditionBlock?putValue([b.conditionBlock],targetId,field,valueBlock)[0]:undefined,valueBlock:b.id===targetId&&field==="valueBlock"?valueBlock:b.valueBlock?putValue([b.valueBlock],targetId,field,valueBlock)[0]:undefined,rightBlock:b.id===targetId&&field==="rightBlock"?valueBlock:b.rightBlock?putValue([b.rightBlock],targetId,field,valueBlock)[0]:undefined,children:putValue(b.children??[],targetId,field,valueBlock),elseIf:b.elseIf?.map(br=>({...br,children:putValue(br.children,targetId,field,valueBlock)})),elseChildren:b.elseChildren?putValue(b.elseChildren,targetId,field,valueBlock):undefined}));
