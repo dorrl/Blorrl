@@ -207,7 +207,9 @@ export default function App() {
         setSelected(drag.ids.slice(0,1));
       } else if (ghost) {
         setBlocks(current => {
-          const moving = current.filter(block => drag.ids.includes(block.id));
+          const moving = drag.ids
+            .map(id => current.find(block => block.id === id))
+            .filter((block): block is Block => !!block);
           const rest = current.filter(block => !drag.ids.includes(block.id));
           const parentId = ghost.targetId === "__start" ? "__start" : ghost.targetId;
           const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
