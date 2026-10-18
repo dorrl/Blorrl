@@ -2044,3 +2044,68 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .catalog-category { display:flex; flex-direction:column; }
 .catalog-category-title { padding:10px 12px 5px; color:#818a98; font:9px var(--mono); letter-spacing:.8px; text-transform:uppercase; }
 .block-canvas { padding:0 90px 110px 0; scroll-padding-bottom:110px; scroll-padding-right:90px; }
+
+
+/* Category colors are the single source of truth for block surfaces. */
+.block-card.category-output {
+  background: #2f9b67 !important;
+  border-color: #57c38c !important;
+  color: #fff;
+}
+.block-card.category-variables {
+  background: #3579bb !important;
+  border-color: #6eaff0 !important;
+  color: #fff;
+}
+.block-card.category-control {
+  background: #208d9c !important;
+  border-color: #65d2dd !important;
+  color: #fff;
+}
+.block-card.category-values {
+  background: #7755aa !important;
+  border-color: #c5a6f5 !important;
+  color: #fff !important;
+}
+.block-card.category-output:before, .block-card.category-output:after,
+.block-card.category-variables:before, .block-card.category-variables:after,
+.block-card.category-control:before, .block-card.category-control:after,
+.block-card.category-values:before, .block-card.category-values:after {
+  background: inherit;
+  border-color: inherit;
+}
+.catalog-icon.category-output, .type-icon.category-output { background: #23392f !important; color: #83d6a4 !important; }
+.catalog-icon.category-variables, .type-icon.category-variables { background: #26374b !important; color: #8cc8ff !important; }
+.catalog-icon.category-control, .type-icon.category-control { background: #233e43 !important; color: #7dd9df !important; }
+.catalog-icon.category-values, .type-icon.category-values { background: #392d4a !important; color: #d0a3ff !important; }
+
+/* The ghost contains inert clones of the dragged blocks, not a generic placeholder. */
+.snap-ghost.snap-ghost-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: max-content;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  letter-spacing: normal;
+}
+.snap-ghost.snap-ghost-stack > .block-card {
+  flex: 0 0 auto;
+  box-shadow: 0 4px 12px #0004;
+  filter: saturate(.82);
+}
+.snap-ghost.snap-ghost-stack.value-snap-ghost {
+  width: max-content;
+  max-width: min(520px, calc(100vw - 40px));
+  transform: translateY(-50%);
+}
+.snap-ghost.snap-ghost-stack.value-snap-ghost > .block-card {
+  max-width: min(520px, calc(100vw - 40px));
+}

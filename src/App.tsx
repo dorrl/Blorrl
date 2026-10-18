@@ -19,6 +19,7 @@ import { useCanvasPan } from "./editor/useCanvasPan";
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
 type SnapGhost = { x: number; y: number; count: number; targetId: string };
+function categoryClass(kind: BlockKind) { return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase(); }
 
 export default function App() {
   const [blocks, setBlocks] = useState(initialBlocks);
@@ -38,7 +39,9 @@ export default function App() {
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const blockDragMoved = useRef(false);
-  const [dragPreview, setDragPreview] = useState<{ids:string[];dx:number;dy:number}|null>(null);
+  const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
+  const snapGhostContentRef = useRef<HTMLDivElement>(null);
+  const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
   const snapGhostRef = useRef<SnapGhost | null>(null);
@@ -111,7 +114,9 @@ export default function App() {
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
       if (Math.hypot(dx, dy) > 3) blockDragMoved.current = true;
-      setDragPreview({ids:drag.ids,dx,dy});
+      insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
+      insertionPreviewElementsRef.current = [];
+      drag.ids.forEach(id => { const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.willChange = "transform"; element.style.transform = `translate(${dx}px, ${dy}px)`; } });
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const movingOrigin = drag.origins[drag.ids[0] ?? ""];
@@ -162,8 +167,19 @@ export default function App() {
         ? startCandidate
         : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
+      const previousGhost = snapGhostRef.current;
+      if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
       snapGhostRef.current = ghost;
-      setSnapGhost(ghost);
+      if (ghost && !ghost.targetId.startsWith("__value__:") && !ghost.targetId.startsWith("__condition__:")) {
+        const movingHeight = drag.ids.reduce((sum, id) => sum + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
+        Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
+          if (!drag.ids.includes(element.dataset.blockId ?? "") && element.offsetTop >= ghost.y) {
+            element.style.willChange = "transform";
+            element.style.transform = `translateY(${movingHeight}px)`;
+            insertionPreviewElementsRef.current.push(element);
+          }
+        });
+      }
       if (Math.hypot(dx, dy) > 3) event.preventDefault();
     };
 
@@ -171,6 +187,9 @@ export default function App() {
       const drag = blockPointerDrag.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       blockPointerDrag.current = null;
+      drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.willChange = ""; } });
+      insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
+      insertionPreviewElementsRef.current = [];
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
       const ghost = snapGhostRef.current;
@@ -229,16 +248,59 @@ export default function App() {
       setSnapGhost(null);
     };
 
-    window.addEventListener("pointermove", handleBlockPointerMove);
-    window.addEventListener("pointerup", handleBlockPointerUp);
-    window.addEventListener("pointercancel", handleBlockPointerUp);
+    let moveFrame = 0;
+    let latestMove: PointerEvent | null = null;
+    const scheduleBlockPointerMove = (event: PointerEvent) => {
+      latestMove = event;
+      if (moveFrame) return;
+      moveFrame = requestAnimationFrame(() => {
+        moveFrame = 0;
+        const latest = latestMove;
+        latestMove = null;
+        if (latest) handleBlockPointerMove(latest);
+      });
+    };
+    const finishBlockPointerMove = (event: PointerEvent) => {
+      if (moveFrame) cancelAnimationFrame(moveFrame);
+      moveFrame = 0;
+      latestMove = null;
+      const drag = blockPointerDrag.current;
+      if (drag && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 3) handleBlockPointerMove(event);
+      handleBlockPointerUp(event);
+    };
+    window.addEventListener("pointermove", scheduleBlockPointerMove);
+    window.addEventListener("pointerup", finishBlockPointerMove);
+    window.addEventListener("pointercancel", finishBlockPointerMove);
     return () => {
-      window.removeEventListener("pointermove", handleBlockPointerMove);
-      window.removeEventListener("pointerup", handleBlockPointerUp);
-      window.removeEventListener("pointercancel", handleBlockPointerUp);
+      if (moveFrame) cancelAnimationFrame(moveFrame);
+      window.removeEventListener("pointermove", scheduleBlockPointerMove);
+      window.removeEventListener("pointerup", finishBlockPointerMove);
+      window.removeEventListener("pointercancel", finishBlockPointerMove);
     };
   }, []);
 
+  useEffect(() => {
+    const container = snapGhostContentRef.current;
+    if (!container) return;
+    container.replaceChildren();
+    if (!snapGhost || !dragPreview || !canvasRef.current) return;
+    dragPreview.ids.forEach((id, index) => {
+      const source = Array.from(canvasRef.current!.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(element => element.dataset.blockId === id);
+      if (!source) return;
+      const clone = source.cloneNode(true) as HTMLElement;
+      clone.classList.remove("selected");
+      clone.removeAttribute("data-block-id");
+      clone.removeAttribute("data-drop-into");
+      clone.setAttribute("aria-hidden", "true");
+      clone.setAttribute("inert", "");
+      clone.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(element => { element.removeAttribute("data-block-id"); element.removeAttribute("data-drop-into"); });
+      clone.querySelectorAll(".delete-block").forEach(element => element.remove());
+      clone.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => { element.setAttribute("disabled", ""); element.setAttribute("tabindex", "-1"); });
+      clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => { element.style.position = "relative"; element.style.left = "auto"; element.style.top = "auto"; element.style.transform = "none"; element.style.zIndex = "auto"; });
+      Object.assign(clone.style, { position: "relative", left: "auto", top: "auto", transform: "none", zIndex: "auto", marginTop: index ? "-1px" : "0", pointerEvents: "none" });
+      container.appendChild(clone);
+    });
+  }, [snapGhost?.targetId, dragPreview?.ids.join(",")]);
 
   function updateBlock(id: string, patch: Partial<Block>) {
     setBlocks(current => updateBlockTree(current, id, patch));
@@ -536,7 +598,7 @@ export default function App() {
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
@@ -566,13 +628,14 @@ export default function App() {
             const origins: Record<string,{x:number;y:number}> = {};
             ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:90 + blocks.findIndex(item=>item.id===id)*86}; });
             setDragCanvasExtent(canvasRef.current?.scrollHeight ?? 0);
+            setDragPreview({ids});
             blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
             snapGhostRef.current = null;
             setSnapGhost(null);
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           }} onClick={e => selectBlock(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
-              <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
+              <div className="block-content"><div className="block-type"><span className={"type-icon " + categoryClass(block.kind) + " " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
                   {block.kind === "let" && <VariableBlock block={block} updateBlock={updateBlock} renderValueSlot={renderValueSlot} typePanelOpen={typePanelFor === block.id} onToggleTypePanel={() => setTypePanelFor(typePanelFor === block.id ? null : block.id)} onUpdateType={updateType} />}
                   {block.kind === "input" && <InputBlock block={block} updateBlock={updateBlock} typePanelOpen={typePanelFor === block.id} onToggleTypePanel={() => setTypePanelFor(typePanelFor === block.id ? null : block.id)} onUpdateType={updateType} />}
@@ -588,7 +651,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && (() => { const reporter = snapGhost.targetId.startsWith("__value__:") && dragPreview?.ids.length === 1 ? allBlocks(blocks).find(item => item.id === dragPreview.ids[0] && ["add","compare","true","false","get"].includes(item.kind)) : undefined; return reporter ? <div className="snap-ghost value-snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span className={"value-chip kind-" + reporter.kind}>{reporter.kind === "add" ? <Calculate block={reporter} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : reporter.kind === "compare" ? <Compare block={reporter} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : <ReporterContent block={reporter} updateBlock={updateBlock} />}</span></div> : <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>; })()}
+          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (snapGhost.targetId.startsWith("__value__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>
