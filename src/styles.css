@@ -110,3 +110,63 @@
 .block-card.kind-get { background: #8a64bd; border-color: #c1a4ee; min-height: 0; height: 38px; }
 .catalog-icon.get, .type-icon.get { background: #392d4a; color: #d0a3ff; }
 @media(max-width:760px) { .block-card { max-width: calc(100% - 24px); } .block-content { gap: 6px; } .block-fields input { width: 90px; } .block-fields .wide-field input { width: 125px; max-width: 125px; } .type-panel { flex-wrap: wrap; } }
+
+
+/* Literal value and comparison blocks, with compact type labels and precise insertion targets. */
+.type-panel-button {
+  display: block;
+  flex: 0 1 92px;
+  width: 92px;
+  min-width: 0;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.block-card.kind-true { background: #27885b; border-color: #72d5a0; height: 38px; min-height: 0; }
+.block-card.kind-false { background: #9b454b; border-color: #ee9aa0; height: 38px; min-height: 0; }
+.block-card.kind-compare { background: #7755aa; border-color: #bda0ef; height: 42px; min-height: 0; }
+.catalog-icon.true, .type-icon.true { background: #23392f; color: #83d6a4; }
+.catalog-icon.false, .type-icon.false { background: #432b30; color: #ff9ba2; }
+.catalog-icon.compare, .type-icon.compare { background: #392d4a; color: #d0a3ff; }
+.condition-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 190px;
+  max-width: 330px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px dashed #fff9;
+  border-radius: 5px;
+  background: #10182038;
+  color: white;
+  font: 10px var(--mono);
+  cursor: copy;
+  transition: background .12s, border-color .12s, box-shadow .12s;
+}
+.condition-slot > span:not(.condition-caption) {
+  color: #ffffffb8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.condition-slot > strong { white-space: nowrap; }
+.condition-slot .condition-caption {
+  color: #f4d08b;
+  font: 700 9px var(--mono);
+  letter-spacing: .5px;
+}
+.condition-slot.condition-hover, .condition-slot:hover {
+  background: #8cc8ff20;
+  border-color: #b5ddff;
+  box-shadow: 0 0 0 2px #8cc8ff20;
+}
+.block-card.kind-if .block-content { flex-wrap: wrap; }
+.block-card.kind-if .block-fields { flex-wrap: wrap; }
+.block-card.kind-compare .operator-fields input { width: 82px; }
+@media(max-width:760px) {
+  .type-panel-button { flex-basis: 72px; width: 72px; max-width: 72px; }
+  .condition-slot { min-width: 150px; max-width: 235px; }
+  .block-card.kind-compare .operator-fields input { width: 60px; }
+}
