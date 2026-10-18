@@ -324,7 +324,7 @@ export default function App() {
       ghost.style.removeProperty("--palette-preview-scale");
       Object.assign(ghost.style, {
         position: "relative", left: "auto", top: "auto", transform: "none", zoom: "1",
-        width: "", maxWidth: "", minWidth: "",
+        width: "", maxWidth: `${Math.max(1, Math.min(560, canvasRef.current!.clientWidth - 24))}px`, minWidth: "",
         minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
       container.appendChild(ghost);
