@@ -236,7 +236,7 @@ export function compileC(blocks: Block[]): Compilation {
     const pad = "  ".repeat(depth);
     for (const b of items) try {
       if (b.kind === "print") {
-        lines.push(pad + "printf(\"%s\\\\n\", " + JSON.stringify(b.value) + ");");
+        lines.push(pad + "printf(\"%s\\n\", " + JSON.stringify(b.value) + ");");
       } else if (b.kind === "get") {
         const name = b.value.trim();
         if (!identifier.test(name) || !names.has(name)) errors.push("Unknown variable \"" + name + "\".");
