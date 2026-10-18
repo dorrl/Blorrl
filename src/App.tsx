@@ -170,16 +170,6 @@ export default function App() {
       const previousGhost = snapGhostRef.current;
       if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
       snapGhostRef.current = ghost;
-      if (ghost && !ghost.targetId.startsWith("__value__:") && !ghost.targetId.startsWith("__condition__:")) {
-        const movingHeight = drag.ids.reduce((sum, id) => sum + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
-        Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
-          if (!drag.ids.includes(element.dataset.blockId ?? "") && element.offsetTop >= ghost.y) {
-            element.style.willChange = "transform";
-            element.style.transform = `translateY(${movingHeight}px)`;
-            insertionPreviewElementsRef.current.push(element);
-          }
-        });
-      }
       if (Math.hypot(dx, dy) > 3) event.preventDefault();
     };
 
@@ -215,7 +205,6 @@ export default function App() {
         drag.ids.forEach(id => delete next[id]);
         setSelected(drag.ids.slice(0,1));
       } else if (ghost) {
-        const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
         setBlocks(current => {
           const moving = current.filter(block => drag.ids.includes(block.id));
           const rest = current.filter(block => !drag.ids.includes(block.id));
@@ -223,9 +212,6 @@ export default function App() {
           const attached = moving.map((block, index) => ({ ...block, attachedTo: index === 0 ? (ghost.targetId === "__start" ? "__start" : ghost.targetId) : moving[index - 1]!.id }));
           rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
           return rest;
-        });
-        Object.entries(next).forEach(([id,point]) => {
-          if (!drag.ids.includes(id) && point.y >= ghost.y) next[id] = {x:point.x,y:point.y+movingHeight};
         });
         let y = ghost.y;
         drag.ids.forEach(id => {
@@ -288,7 +274,7 @@ export default function App() {
       const source = Array.from(canvasRef.current!.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(element => element.dataset.blockId === id);
       if (!source) return;
       const clone = source.cloneNode(true) as HTMLElement;
-      clone.classList.remove("selected");
+      clone.classList.remove("selected", "ghost-source-hidden");
       clone.removeAttribute("data-block-id");
       clone.removeAttribute("data-drop-into");
       clone.setAttribute("aria-hidden", "true");
