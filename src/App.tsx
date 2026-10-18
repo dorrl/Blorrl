@@ -450,6 +450,7 @@ export default function App() {
             setSelected([child.id]);
           }
         } else moveSelection(payload.ids,targetId);
+      }
     } catch { /* Ignore invalid drag payloads. */ }
   }
   function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
