@@ -275,37 +275,22 @@ export default function App() {
     if (!snapGhost || !canvasRef.current) return;
 
     if (libraryDragKind) {
-      const item = catalog.find(entry => entry.kind === libraryDragKind);
-      if (!item) return;
-      const ghost = document.createElement("article");
-      ghost.className = `block-card ${categoryClass(libraryDragKind)} kind-${libraryDragKind}`;
+      const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
+      if (!source) return;
+      const ghost = source.cloneNode(true) as HTMLElement;
+      ghost.classList.remove("selected", "library-block-preview");
       ghost.setAttribute("aria-hidden", "true");
       ghost.setAttribute("inert", "");
+      ghost.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => {
+        element.setAttribute("disabled", "");
+        element.setAttribute("tabindex", "-1");
+      });
       const canvasWidth = canvasRef.current.clientWidth;
-      Object.assign(ghost.style, { position: "relative", left: "auto", top: "auto", width: "max-content", maxWidth: `${Math.max(0, canvasWidth - 24)}px`, minWidth: "0", minHeight: "0", boxSizing: "border-box", pointerEvents: "none" });
-      const gutter = document.createElement("div");
-      gutter.className = "block-gutter";
-      const gutterMark = document.createElement("span");
-      gutterMark.textContent = "+";
-      gutter.appendChild(gutterMark);
-      const content = document.createElement("div");
-      content.className = "block-content";
-      const type = document.createElement("div");
-      type.className = "block-type";
-      const label = document.createElement("strong");
-      label.textContent = item.label;
-      const kind = document.createElement("span");
-      kind.className = "block-kind";
-      kind.textContent = libraryDragKind.toUpperCase();
-      type.append(label, kind);
-      const fields = document.createElement("div");
-      fields.className = "block-fields";
-      const hint = document.createElement("span");
-      hint.className = "field-hint";
-      hint.textContent = item.hint;
-      fields.appendChild(hint);
-      content.append(type, fields);
-      ghost.append(gutter, content);
+      Object.assign(ghost.style, {
+        position: "relative", left: "auto", top: "auto", width: "max-content",
+        maxWidth: `${Math.max(0, canvasWidth - 24)}px`, minWidth: "0",
+        minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
+      });
       container.appendChild(ghost);
       return;
     }

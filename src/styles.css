@@ -2126,3 +2126,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   flex-shrink: 0;
   filter: none;
 }
+
+
+/* Block palette previews reuse the canvas block silhouette and typography. */
+.catalog-item { display:block; width:100%; padding:0; background:transparent; border:0; text-align:left; cursor:grab; overflow:visible; }
+.catalog-item:active { cursor:grabbing; }
+.library-block-preview { position:relative; left:auto; top:auto; width:max-content; max-width:100%; min-width:0; margin:0; pointer-events:none; box-sizing:border-box; }
+.library-block-preview .block-gutter { min-width:27px; }
+.library-block-preview .block-type { gap:6px; }
+.library-block-preview .block-fields { white-space:nowrap; }
+.library-block-preview .preview-value { display:inline-block; padding:2px 5px; border:1px solid #454b57; border-radius:3px; background:#242730; color:#dfe4ed; font:10px var(--mono); }
+.catalog-item .catalog-grip { display:none; }
+.catalog-item:hover .library-block-preview { filter:brightness(1.12); }
