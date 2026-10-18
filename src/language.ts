@@ -272,6 +272,17 @@ export function compileC(blocks: Block[]): Compilation {
     if (!/^[\w\s"'().,+\-*/%<>=!&|\\]+$/.test(s)) throw new Error("Expression contains unsupported characters.");
     return s.replace(/\btrue\b/g, "1").replace(/\bfalse\b/g, "0");
   };
+  const cCompare = (left: string, operator: "==" | ">=" | "<=", right: string) => {
+    const isString = (value: string) => {
+      const trimmed = value.trim();
+      return (trimmed.startsWith('"') && trimmed.endsWith('"')) || names.get(trimmed) === "string";
+    };
+    if (isString(left) || isString(right)) return "strcmp(" + expr(left) + ", " + expr(right) + ") " + operator + " 0";
+    return "(" + expr(left) + ") " + operator + " (" + expr(right) + ")";
+  };
+  const cCondition = (block: Block) => block.kind === "compare"
+    ? cCompare(block.value || "0", block.comparisonOperator ?? "==", block.right || "0")
+    : expr(conditionExpression(block));
   const lines = ["#include <stdio.h>", "#include <stdlib.h>", "#include <string.h>", "int main(void) {"];
   for (const [name,type] of names) lines.push("  " + (type === "string" ? "const char *" : "double") + " " + name + " = " + (type === "string" ? '""' : "0") + ";");
   let temp = 0;
@@ -292,9 +303,9 @@ export function compileC(blocks: Block[]): Compilation {
       } else if (b.kind === "add") lines.push(`${pad}printf("%.15g\\n", (${expr(b.value || "0")}) ${b.operator ?? "+"} (${expr(b.right || "1")}));`);
       else if (b.kind === "true") lines.push(pad + "printf(\"%s\\n\", \"true\");");
       else if (b.kind === "false") lines.push(pad + "printf(\"%s\\n\", \"false\");");
-      else if (b.kind === "compare") lines.push(pad + "printf(\"%d\\n\", (" + expr(b.value || "0") + ") " + (b.comparisonOperator ?? "==") + " (" + expr(b.right || "0") + "));");
+      else if (b.kind === "compare") lines.push(pad + "printf(\"%d\\n\", " + cCompare(b.value || "0", b.comparisonOperator ?? "==", b.right || "0") + ");");
       else if (b.kind === "if") {
-        lines.push(pad + "if (" + (b.conditionBlock ? expr(conditionExpression(b.conditionBlock)) : "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
+        lines.push(pad + "if (" + (b.conditionBlock ? cCondition(b.conditionBlock) : "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
         for (const br of b.elseIf ?? []) { lines.push(pad+"else if ("+expr(br.condition||"0")+") {");emit(br.children,depth+1);lines.push(pad+"}"); }
         if (b.elseChildren) {lines.push(pad+"else {");emit(b.elseChildren,depth+1);lines.push(pad+"}");}
       } else if (b.kind === "repeat") {
