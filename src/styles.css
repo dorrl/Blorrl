@@ -1371,6 +1371,28 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   pointer-events: none;
   box-shadow: 0 0 0 4px #8cc8ff12;
 }
+.snap-ghost.value-snap-ghost {
+  width: max-content;
+  max-width: min(520px, calc(100vw - 40px));
+  min-height: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+.snap-ghost.value-snap-ghost > .value-chip {
+  display: inline-block;
+  opacity: .82;
+  outline: 2px dashed #b5ddff;
+  outline-offset: 2px;
+  pointer-events: none;
+}
+.snap-ghost.value-snap-ghost .value-slot {
+  border-color: #b5ddff;
+}
 .snap-ghost > span {
   display: block;
   width: 7px;

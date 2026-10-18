@@ -30,6 +30,7 @@ export default function App() {
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
+  const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[];dx:number;dy:number}|null>(null);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
@@ -101,6 +102,7 @@ export default function App() {
 
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
+      if (Math.hypot(dx, dy) > 3) blockDragMoved.current = true;
       setDragPreview({ids:drag.ids,dx,dy});
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
@@ -554,7 +556,7 @@ export default function App() {
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:selected.includes(block.id)?4:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:selected.includes(block.id)?4:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
             e.preventDefault();
             e.stopPropagation();
@@ -613,7 +615,7 @@ export default function App() {
                 </div>}
               </div>
             </article>)}
-          {snapGhost && <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>}
+          {snapGhost && (() => { const reporter = snapGhost.targetId.startsWith("__value__:") && dragPreview?.ids.length === 1 ? allBlocks(blocks).find(item => item.id === dragPreview.ids[0] && ["add","compare","true","false","get"].includes(item.kind)) : undefined; return reporter ? <div className="snap-ghost value-snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span className={"value-chip kind-" + reporter.kind}>{renderReporter(reporter)}</span></div> : <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>; })()}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>
