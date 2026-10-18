@@ -11,32 +11,23 @@ import { VariableBlock, InputBlock } from "../editor/blocks/Variables";
 import { IfConditionField, RepeatBlock, ControlBlockBody } from "../editor/blocks/Control";
 import { ReporterContent, ValueSlot } from "../editor/blocks/Values";
 import { catalog } from "../editor/blockCatalog";
-type BlockLibraryProps = { query: string; onQueryChange: (query: string) => void; onDragStart: (event: DragEvent<HTMLElement>, kind: BlockKind) => void; onDragEnd: () => void; onAddBlock: (kind: BlockKind) => void };
+type BlockLibraryProps = { query: string; previewScale: number; onQueryChange: (query: string) => void; onDragStart: (event: DragEvent<HTMLElement>, kind: BlockKind) => void; onDragEnd: () => void; onAddBlock: (kind: BlockKind) => void };
 const categoryOrder = ["Output", "Variables", "Control", "Values"] as const;
 function categoryClass(kind: BlockKind) { return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase(); }
-export function BlockLibrary({ query, onQueryChange, onDragStart, onDragEnd, onAddBlock }: BlockLibraryProps) {
+export function BlockLibrary({ query, previewScale, onQueryChange, onDragStart, onDragEnd, onAddBlock }: BlockLibraryProps) {
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint + " " + item.category).toLowerCase().includes(query.toLowerCase()));
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const fitPreviews = () => {
-      list.querySelectorAll<HTMLElement>(".catalog-item").forEach(item => {
-        const preview = item.querySelector<HTMLElement>(".library-block-preview");
-        if (!preview) return;
-        preview.style.zoom = "1";
-        const naturalWidth = preview.getBoundingClientRect().width;
-        const availableWidth = Math.max(1, item.clientWidth - 16);
-        const scale = naturalWidth > 0 ? Math.min(1, availableWidth / naturalWidth) : 1;
-        preview.style.setProperty("--palette-preview-scale", String(scale));
-        preview.style.zoom = String(scale);
-      });
-    };
-    fitPreviews();
-    const observer = new ResizeObserver(fitPreviews);
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, [visibleCatalog.length, query]);
+
+    // Every preview shares the same scale derived from the sidebar width.
+    // The block keeps its own intrinsic aspect ratio and internal layout.
+    list.querySelectorAll<HTMLElement>(".library-block-preview").forEach(preview => {
+      preview.style.setProperty("--palette-preview-scale", String(previewScale));
+      preview.style.zoom = String(previewScale);
+    });
+  }, [previewScale, visibleCatalog.length, query]);
   const updateBlock = (_id: string, _patch: Partial<Block>) => {};
   const updateType = (_id: string, _type: ValueType, _checked: boolean) => {};
   const renderValueSlot = (owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string): ReactNode => (
