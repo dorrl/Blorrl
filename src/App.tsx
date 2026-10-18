@@ -4,9 +4,9 @@ import { Play, Hammer, Plus, Terminal, Blocks, ChevronDown, CircleHelp, Download
 import { compile, compileC, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 
 const initialBlocks: Block[] = [
-  { id: "b1", kind: "print", value: '"Hello from Blorrl!"' },
-  { id: "b2", kind: "let", name: "answer", value: "40 + 2", types: ["number"] },
-  { id: "b3", kind: "print", value: "answer" },
+  { id: "b1", kind: "print", value: "Hello from Blorrl!" },
+  { id: "b2", kind: "let", name: "answer", value: "42", types: ["number"] },
+  { id: "b3", kind: "get", value: "answer" },
 ];
 const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "print", label: "Print", hint: "Write a value to terminal" },
@@ -15,7 +15,10 @@ const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "get", label: "Get variable", hint: "Output a variable value" },
   { kind: "if", label: "If condition", hint: "Run a block when true" },
   { kind: "repeat", label: "Repeat", hint: "Repeat a number of times" },
-  { kind: "add", label: "Add", hint: "Add two numbers" },
+  { kind: "add", label: "Calculate", hint: "Calculate with two numbers" },
+  { kind: "true", label: "True", hint: "Boolean true value" },
+  { kind: "false", label: "False", hint: "Boolean false value" },
+  { kind: "compare", label: "Compare", hint: "Compare two values (==, >=, <=)" },
 ];
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
@@ -50,7 +53,7 @@ export default function App() {
   const compiled = useMemo(() => compile(blocks), [blocks]);
   const cCompiled = useMemo(() => compileC(blocks), [blocks]);
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
-  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
+  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
   const totalBlocks = allBlocks(blocks).length;
 
   useEffect(() => {
@@ -182,17 +185,19 @@ export default function App() {
 
   function updateBlock(id: string, patch: Partial<Block>) {
     const update = (items: Block[]): Block[] => items.map(block => block.id === id ? {...block,...patch} : ({
-      ...block, children:update(block.children ?? []),
+      ...block, conditionBlock:block.conditionBlock ? update([block.conditionBlock])[0] : undefined, children:update(block.children ?? []),
       elseIf:block.elseIf?.map(branch=>({...branch,children:update(branch.children)})),
       elseChildren:block.elseChildren ? update(block.elseChildren) : undefined,
     }));
     setBlocks(update); setStatus("idle");
   }
   function makeBlock(kind: BlockKind): Block {
-    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? "Hello!" : kind==="get" ? "value" : kind==="if" ? "true" : "1"};
+    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? "Hello!" : kind==="get" ? "value" : kind==="true" ? "true" : kind==="false" ? "false" : "1"};
     if (kind==="let" || kind==="input") {block.name="value";block.types=["number"];}
     if (kind==="add") {block.right="1";block.operator="+";}
-    if (kind==="if" || kind==="repeat") block.children=[];
+    if (kind==="compare") {block.right="0";block.comparisonOperator="==";}
+    if (kind==="if") {block.children=[];block.conditionBlock={id:crypto.randomUUID(),kind:"false",value:"false"};}
+    if (kind==="repeat") block.children=[];
     return block;
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
@@ -207,7 +212,19 @@ export default function App() {
     setSelected([block.id]); setStatus("idle");
   }
   function removeIds(items: Block[], ids: string[]): Block[] {
-    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
+    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, conditionBlock:b.conditionBlock && !ids.includes(b.conditionBlock.id) ? b.conditionBlock : undefined, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
+  }
+  function putCondition(items: Block[], targetId: string, conditionBlock: Block): Block[] {
+    return items.map(b => ({...b, conditionBlock:b.id===targetId ? conditionBlock : b.conditionBlock ? putCondition([b.conditionBlock],targetId,conditionBlock)[0] : undefined, children:putCondition(b.children??[],targetId,conditionBlock), elseIf:b.elseIf?.map(br=>({...br,children:putCondition(br.children,targetId,conditionBlock)})), elseChildren:b.elseChildren?putCondition(b.elseChildren,targetId,conditionBlock):undefined}));
+  }
+  function dropCondition(targetId: string, child: Block, movingIds: string[] = []) {
+    if (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare") return;
+    setBlocks(current => {
+      const source = allBlocks(current).find(b => b.id === child.id) ?? child;
+      const rest = movingIds.length ? removeIds(current,movingIds) : current;
+      return putCondition(rest,targetId,source);
+    });
+    setSelected([child.id]); setStatus("idle");
   }
   function insertNested(targetId: string, child: Block) {
     const insert = (items: Block[]): Block[] => items.map(b => {
@@ -310,6 +327,15 @@ export default function App() {
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw)return;
     try {
       const payload=JSON.parse(raw) as DragPayload;
+      const conditionTarget = targetId?.startsWith("condition:") ? targetId.slice("condition:".length) : undefined;
+      if (conditionTarget) {
+        if (payload.source === "library") dropCondition(conditionTarget,makeBlock(payload.kind));
+        else {
+          const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
+          if (child) dropCondition(conditionTarget,child,payload.ids);
+        }
+        return;
+      }
       const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
       const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
       if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
@@ -430,9 +456,10 @@ export default function App() {
                   {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Input types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}<span className="field-hint">Reads one line from terminal input</span></>}
                   {block.kind === "print" && <label className="wide-field">TEXT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "get" && <label>VARIABLE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
-                  {block.kind === "if" && <label className="wide-field">CONDITION<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
+                  {block.kind === "if" && <div className="condition-slot" data-condition-for={block.id} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("condition-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("condition-hover")} onDrop={e=>{e.currentTarget.classList.remove("condition-hover");onDrop(e,"condition:"+block.id);}}><span className="condition-caption">IF</span>{block.conditionBlock ? <><strong>{block.conditionBlock.kind==="true"?"True":block.conditionBlock.kind==="false"?"False":"Compare"}</strong>{block.conditionBlock.kind==="compare" && <span>{block.conditionBlock.value} {block.conditionBlock.comparisonOperator??"=="} {block.conditionBlock.right??"0"}</span>}</> : <span>Drop True / False / Compare</span>}</div>}
                   {block.kind === "repeat" && <label>COUNT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
-                  {block.kind === "add" && <div className="operator-fields"><input aria-label="Left operand" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /><select aria-label="Operator" value={block.operator ?? "+"} onChange={e=>updateBlock(block.id,{operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}><option>+</option><option>-</option><option>*</option><option>/</option></select><input aria-label="Right operand" value={block.right ?? "1"} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></div>}
+                  {(block.kind === "add" || block.kind === "compare") && <div className="operator-fields"><input aria-label="Left operand" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /><select aria-label="Operator" value={block.kind === "compare" ? block.comparisonOperator ?? "==" : block.operator ?? "+"} onChange={e=>updateBlock(block.id,block.kind === "compare" ? {comparisonOperator:e.target.value as Block["comparisonOperator"]} : {operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}>{block.kind === "compare" ? <><option>==</option><option>&gt;=</option><option>&lt;=</option></> : <><option>+</option><option>-</option><option>*</option><option>/</option></>}</select><input aria-label="Right operand" value={block.right ?? (block.kind === "compare" ? "0" : "1")} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></div>}
+                  {(block.kind === "true" || block.kind === "false") && <span className="field-hint">{block.kind === "true" ? "Always true" : "Always false"}</span>}
                 </div>
                 {(block.kind === "if" || block.kind === "repeat") && <div className="nested-flow" data-drop-into={block.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,block.id)}>
                   <div className="nested-label">{block.kind === "if" ? "THEN" : "REPEAT BODY"} <span>DROP BLOCKS HERE</span></div>
