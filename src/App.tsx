@@ -31,6 +31,7 @@ export default function App() {
   const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const [dragPreview, setDragPreview] = useState<{ids:string[];dx:number;dy:number}|null>(null);
+  const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
   const snapGhostRef = useRef<SnapGhost | null>(null);
   snapGhostRef.current = snapGhost;
@@ -211,6 +212,7 @@ export default function App() {
 
       setPositions(next);
       setDragPreview(null);
+      setDragCanvasExtent(0);
       if (ghost) setStatus("idle");
       snapGhostRef.current = null;
       setSnapGhost(null);
@@ -429,17 +431,25 @@ export default function App() {
       }
       const reporterKinds = ["add","compare","true","false","get"];
       const movingKinds = payload.source === "library" ? [payload.kind] : allBlocks(blocks).filter(b=>payload.ids.includes(b.id)).map(b=>b.kind);
-      if (movingKinds.some(kind=>reporterKinds.includes(kind))) return;
+      const isReporter = movingKinds.some(kind=>reporterKinds.includes(kind));
       const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
       const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
       if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
         if(payload.source==="library") insertNested(targetId,makeBlock(payload.kind));
         else nestBlocks(targetId,payload.ids);
-      } else if(payload.source==="library") {
+      } else {
         const rect=canvasRef.current?.getBoundingClientRect();
         const point=rect&&canvasRef.current?{x:Math.max(12,event.clientX-rect.left+canvasRef.current.scrollLeft-150),y:Math.max(64,event.clientY-rect.top+canvasRef.current.scrollTop-24)}:undefined;
-        addBlock(payload.kind, targetId, point);
-      } else moveSelection(payload.ids,targetId);
+        if (payload.source === "library") {
+          addBlock(payload.kind, targetId, point);
+        } else if (isReporter) {
+          const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
+          if (child && point) {
+            setBlocks(current=>[...removeIds(current,payload.ids),child]);
+            setPositions(current=>({...current,[child.id]:point}));
+            setSelected([child.id]);
+          }
+        } else moveSelection(payload.ids,targetId);
     } catch { /* Ignore invalid drag payloads. */ }
   }
   function startMarquee(event: ReactPointerEvent<HTMLDivElement>) {
@@ -549,10 +559,11 @@ export default function App() {
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span><button className="icon-button" title="Export source" onClick={exportSource}><Download size={15}/></button></div></div>
         {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag empty space to select blocks. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
-        <div className={"block-canvas " + (spaceDown ? "space-pan" : "")} ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
+        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startMarquee} onPointerMove={moveMarquee} onPointerUp={endMarquee} onPointerCancel={endMarquee} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG EMPTY SPACE TO SELECT"}</span></div>
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
+          {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
           {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:selected.includes(block.id)?4:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
@@ -583,6 +594,7 @@ export default function App() {
             if (!selected.includes(block.id)) setSelected(selectedIds);
             const origins: Record<string,{x:number;y:number}> = {};
             ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:90 + blocks.findIndex(item=>item.id===id)*86}; });
+            setDragCanvasExtent(canvasRef.current?.scrollHeight ?? 0);
             blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
             snapGhostRef.current = null;
             setSnapGhost(null);

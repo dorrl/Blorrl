@@ -488,6 +488,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   border-radius:5px;
   touch-action:pan-y
 }
+.block-canvas {
+  overflow-anchor:none;
+}
+.drag-extent-preserver {
+  position:absolute;
+  left:0;
+  width:1px;
+  height:1px;
+  pointer-events:none;
+}
 .canvas-ruler {
   position:absolute;
   left:13px;
@@ -1540,6 +1550,18 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   }
 }
 /* Literal value and comparison blocks, with compact type labels and precise insertion targets. */
+.block-card.kind-let .block-fields {
+  min-width:0;
+  flex:1 1 auto;
+  flex-wrap:wrap;
+}
+.block-card.kind-let .type-panel-button {
+  box-sizing:border-box;
+  flex:0 1 92px;
+  width:92px;
+  min-width:0;
+  max-width:100%;
+}
 .type-panel-button {
   display: block;
   flex: 0 1 92px;
