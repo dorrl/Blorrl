@@ -4,6 +4,8 @@ import { Play, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripV
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
 import { ReporterContent } from "./editor/blocks/ReporterContent";
+import { Calculate } from "./editor/blocks/Calculate";
+import { Compare } from "./editor/blocks/Compare";
 import { PrintBlock } from "./editor/blocks/Print";
 import { VariableBlock } from "./editor/blocks/VariableSet";
 import { InputBlock } from "./editor/blocks/Input";
@@ -14,7 +16,7 @@ import { ControlBlockBody } from "./editor/blocks/ControlBlockBody";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
-import { allBlocks, putCondition, putValue, removeIds } from "./editor/blockTree";
+import { allBlocks, getStartAttachedBlocks, putCondition, putValue, removeIds } from "./editor/blockTree";
 import { createBlock, updateBlockTree } from "./editor/blockOperations";
 import { useCanvasPan } from "./editor/useCanvasPan";
 
@@ -51,8 +53,9 @@ export default function App() {
   positionsRef.current = positions;
   const canvasRef = useRef<HTMLDivElement>(null);
   const { startCanvasGesture, moveCanvasGesture, endCanvasGesture } = useCanvasPan(canvasRef, spaceDown);
-  const compiled = useMemo(() => compile(blocks), [blocks]);
-  const assemblyCompiled = useMemo(() => compileAssembly(blocks), [blocks]);
+  const executableBlocks = useMemo(() => getStartAttachedBlocks(blocks), [blocks]);
+  const compiled = useMemo(() => compile(executableBlocks), [executableBlocks]);
+  const assemblyCompiled = useMemo(() => compileAssembly(executableBlocks), [executableBlocks]);
   const totalBlocks = allBlocks(blocks).length;
 
   useEffect(() => {
@@ -202,7 +205,8 @@ export default function App() {
           const moving = current.filter(block => drag.ids.includes(block.id));
           const rest = current.filter(block => !drag.ids.includes(block.id));
           const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
-          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
+          const attached = moving.map((block, index) => ({ ...block, attachedTo: index === 0 ? (ghost.targetId === "__start" ? "__start" : ghost.targetId) : moving[index - 1]!.id }));
+          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
           return rest;
         });
         Object.entries(next).forEach(([id,point]) => {
@@ -218,6 +222,8 @@ export default function App() {
           const origin = drag.origins[id];
           if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
         });
+      } else {
+        setBlocks(current => current.map(block => drag.ids.includes(block.id) ? ({ ...block, attachedTo: undefined }) : block));
       }
 
       setPositions(next);
@@ -244,11 +250,15 @@ export default function App() {
     setStatus("idle");
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
+    const attached = getStartAttachedBlocks(blocks);
+    const lastAttached = attached[attached.length - 1];
     const block = createBlock(kind);
+    block.attachedTo = beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
     const targetPosition = beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
-    const insertY = targetPosition?.y ?? dropPoint?.y ?? 90 + blocks.length*95;
+    const targetElement = beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
+    const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
     const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;
     setPositions(current => {
       const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
@@ -260,39 +270,11 @@ export default function App() {
     setBlocks(current => {
       if (!beforeId) return [...current, block];
       const index = current.findIndex(item => item.id === beforeId);
-      return index < 0 ? [...current, block] : [...current.slice(0, index), block, ...current.slice(index)];
+      if (index < 0) return [...current, block];
+      const reparented = current.map(item => item.attachedTo === beforeId ? { ...item, attachedTo: block.id } : item);
+      return [...reparented.slice(0, index + 1), block, ...reparented.slice(index + 1)];
     });
     setSelected([block.id]); setStatus("idle");
-  }
-
-  function detachValueBlock(ownerId: string, field: "valueBlock" | "rightBlock") {
-    const canvas = canvasRef.current;
-    const ownerElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`);
-    const canvasRect = canvas?.getBoundingClientRect();
-    const ownerRect = ownerElement?.getBoundingClientRect();
-    const point = canvas && canvasRect && ownerRect ? {
-      x: Math.max(12, ownerRect.left - canvasRect.left + canvas.scrollLeft + 24),
-      y: Math.max(64, ownerRect.top - canvasRect.top + canvas.scrollTop + 44),
-    } : {x:42,y:104};
-    setBlocks(current => {
-      const owner = allBlocks(current).find(block => block.id === ownerId);
-      const nested = owner?.[field];
-      if (!nested) return current;
-      const clearSlot = (items: Block[]): Block[] => items.map(block => ({
-        ...block,
-        ...(block.id === ownerId ? (field === "valueBlock" ? {valueBlock:undefined} : {rightBlock:undefined}) : {}),
-        conditionBlock:block.conditionBlock ? clearSlot([block.conditionBlock])[0] : undefined,
-        valueBlock:block.id === ownerId && field === "valueBlock" ? undefined : block.valueBlock ? clearSlot([block.valueBlock])[0] : undefined,
-        rightBlock:block.id === ownerId && field === "rightBlock" ? undefined : block.rightBlock ? clearSlot([block.rightBlock])[0] : undefined,
-        children:clearSlot(block.children ?? []),
-        elseIf:block.elseIf?.map(branch=>({...branch,children:clearSlot(branch.children)})),
-        elseChildren:block.elseChildren ? clearSlot(block.elseChildren) : undefined,
-      }));
-      return [...clearSlot(current), nested];
-    });
-    setPositions(current => ({...current,[allBlocks(blocks).find(block => block.id === ownerId)?.[field]?.id ?? ""]:point}));
-    setSelected([allBlocks(blocks).find(block => block.id === ownerId)?.[field]?.id ?? ownerId]);
-    setStatus("idle");
   }
 
   function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
@@ -305,7 +287,6 @@ export default function App() {
         updateBlock={updateBlock}
         onDrop={onDrop}
         onDragStart={(event, id) => onDragStart(event, { source: "canvas", ids: [id] })}
-        onDetach={detachValueBlock}
         renderValueSlot={renderValueSlot}
       />
     );
@@ -403,10 +384,10 @@ export default function App() {
     const next: Record<string,{x:number;y:number}> = {...positionsRef.current};
     drag.ids.forEach(item => { const p=drag.origins[item]; next[item]={x:Math.max(12,p.x+dx),y:Math.max(64,p.y+dy)}; });
     const canvas = canvasRef.current;
-    const target = canvas ? Array.from(canvas.querySelectorAll<HTMLElement>("[data-block-id]")).filter(el => !drag.ids.includes(el.dataset.blockId ?? "")).map(el => {
+    const target = canvas ? Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).filter(el => !drag.ids.includes(el.dataset.blockId ?? "")).map(el => {
       const targetId=el.dataset.blockId!; const p=next[targetId] ?? {x:42,y:104}; const r=el.getBoundingClientRect();
-      return {id:targetId,p,dist:Math.hypot(event.clientX-(r.left+r.width/2),event.clientY-r.bottom)};
-    }).filter(item=>item.dist<70).sort((a,b)=>a.dist-b.dist)[0] : undefined;
+      return {id:targetId,p,dist:Math.hypot(event.clientX-(r.left+r.width/2),event.clientY-r.bottom),below:event.clientY>=r.bottom-10};
+    }).filter(item=>item.below&&item.dist<70).sort((a,b)=>a.dist-b.dist)[0] : undefined;
     const startNode = canvas?.querySelector<HTMLElement>(".start-node");
     const startRect = startNode?.getBoundingClientRect();
     const startTarget = startRect ? {id:"__start",p:{x:startNode!.offsetLeft,y:startNode!.offsetTop},dist:Math.hypot(event.clientX-(startRect.left+startRect.width/2),event.clientY-startRect.bottom)} : undefined;
@@ -414,15 +395,18 @@ export default function App() {
     const snapped = snapToStart ? startTarget : target;
     if (snapped) {
       setBlocks(current => {
-        const moving=current.filter(b=>drag.ids.includes(b.id));
-        const rest=current.filter(b=>!drag.ids.includes(b.id));
+        const moving=allBlocks(current).filter(b=>drag.ids.includes(b.id));
+        const rest=removeIds(current,drag.ids);
         const i=snapped.id==="__start" ? -1 : rest.findIndex(b=>b.id===snapped.id);
-        rest.splice(snapped.id==="__start" ? 0 : i<0 ? rest.length : i+1,0,...moving);
+        const attached=moving.map((block,index)=>({...block,attachedTo:index===0?(snapped.id==="__start"?"__start":snapped.id):moving[index-1]!.id}));
+        rest.splice(snapped.id==="__start" ? 0 : i<0 ? rest.length : i+1,0,...attached);
         return rest;
       });
       const targetEl = snapped.id==="__start" ? startNode : canvas?.querySelector<HTMLElement>(`[data-block-id="${snapped.id}"]`);
       let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 1;
       drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-1; });
+    } else {
+      setBlocks(current => { const moving=allBlocks(current).filter(block=>drag.ids.includes(block.id)); return moving.length ? [...removeIds(current,drag.ids),...moving.map(block=>({...block,attachedTo:undefined}))] : current; });
     }
     setPositions(next);
     setStatus("idle");
@@ -436,7 +420,7 @@ export default function App() {
       if (valueTarget && valueTarget.length===2) {
         const [ownerId,field]=valueTarget;
         const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
-        if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
+        if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,{...child,attachedTo:undefined}));
         return;
       }
       const conditionTarget = targetId?.startsWith("condition:") ? targetId.slice("condition:".length) : undefined;
@@ -478,7 +462,7 @@ export default function App() {
   function run() {
     setBusy(true);
     try {
-      const result = runProgram(compiled, stdin, blocks);
+      const result = runProgram(compiled, stdin, executableBlocks);
       setOutput(result.error || result.output || "(no output)");
       setStatus(result.error ? "error" : "ran");
     } catch (error) { setOutput(error instanceof Error ? error.message : String(error)); setStatus("error"); }
@@ -498,7 +482,7 @@ export default function App() {
   }
 
   function saveProject() {
-    const project = { format: "blorrl", version: 1, workspace: { blocks, positions, workspaceRatio, sidebarWidth } };
+    const project = { format: "blorrl", version: 1, workspace: { blocks, attachments: Object.fromEntries(allBlocks(blocks).map(block => [block.id, block.attachedTo ?? null])), positions, workspaceRatio, sidebarWidth } };
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "blorrl-project.blorrl"; a.click();
@@ -519,8 +503,11 @@ export default function App() {
           if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) loadedPositions[id] = {x:p.x,y:p.y};
         }
       }
-      setBlocks(project.workspace.blocks as Block[]); setPositions(loadedPositions);
-      setSelected(project.workspace.blocks[0] ? [project.workspace.blocks[0].id] : []);
+      const loadedBlocks = project.workspace.blocks as Block[];
+      const attachments = project.workspace.attachments && typeof project.workspace.attachments === "object" ? project.workspace.attachments as Record<string, string | null> : null;
+      const normalizedBlocks = loadedBlocks.map((block, index) => ({ ...block, attachedTo: attachments ? (attachments[block.id] ?? undefined) : (typeof block.attachedTo === "string" ? block.attachedTo : (index === 0 ? "__start" : loadedBlocks[index - 1]?.id)) }));
+      setBlocks(normalizedBlocks); setPositions(loadedPositions);
+      setSelected(normalizedBlocks[0] ? [normalizedBlocks[0].id] : []);
       if (Number.isFinite(project.workspace.workspaceRatio)) setWorkspaceRatio(Math.max(30, Math.min(85, project.workspace.workspaceRatio)));
       if (Number.isFinite(project.workspace.sidebarWidth)) setSidebarWidth(Math.max(150, Math.min(420, project.workspace.sidebarWidth)));
       setTypePanelFor(null); setSnapGhost(null); snapGhostRef.current = null;
@@ -547,15 +534,15 @@ export default function App() {
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span></div>
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span></div></div>
-        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag pans the canvas. Drag blocks to move them. Only one block can be selected at a time. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
-        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)}>
+        {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag or Shift + mouse wheel pans the canvas. Drag blocks to move them. Only one block can be selected at a time. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
+        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e)} onWheel={event => { if (event.shiftKey && canvasRef.current) { canvasRef.current.scrollLeft += event.deltaY; event.preventDefault(); } }}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point · fixed</small></div><span className="fixed-pill"><Check size={10}/> FIXED</span></div>
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:selected.includes(block.id)?4:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
-            if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,transform:dragPreview && dragPreview.ids.includes(block.id)?`translate(${dragPreview.dx}px, ${dragPreview.dy}px)`:undefined,touchAction:"none"}} className={"block-card kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+            if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
             const selectedIds = [block.id];
@@ -595,7 +582,9 @@ export default function App() {
                   {block.kind === "let" && <VariableBlock block={block} updateBlock={updateBlock} renderValueSlot={renderValueSlot} typePanelOpen={typePanelFor === block.id} onToggleTypePanel={() => setTypePanelFor(typePanelFor === block.id ? null : block.id)} onUpdateType={updateType} />}
                   {block.kind === "input" && <InputBlock block={block} updateBlock={updateBlock} typePanelOpen={typePanelFor === block.id} onToggleTypePanel={() => setTypePanelFor(typePanelFor === block.id ? null : block.id)} onUpdateType={updateType} />}
                   {block.kind === "print" && <PrintBlock block={block} renderValueSlot={renderValueSlot} />}
-                  {(block.kind === "get" || block.kind === "add" || block.kind === "compare") && <ReporterContent block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
+                  {block.kind === "get" && <ReporterContent block={block} updateBlock={updateBlock} />}
+                  {block.kind === "add" && <Calculate block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
+                  {block.kind === "compare" && <Compare block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
                   {block.kind === "if" && <IfConditionField block={block} updateBlock={updateBlock} renderValueSlot={renderValueSlot} onDrop={onDrop} />}
                   {block.kind === "repeat" && <RepeatBlock block={block} renderValueSlot={renderValueSlot} />}
                   
@@ -604,7 +593,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && (() => { const reporter = snapGhost.targetId.startsWith("__value__:") && dragPreview?.ids.length === 1 ? allBlocks(blocks).find(item => item.id === dragPreview.ids[0] && ["add","compare","true","false","get"].includes(item.kind)) : undefined; return reporter ? <div className="snap-ghost value-snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span className={"value-chip kind-" + reporter.kind}><ReporterContent block={reporter} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /></span></div> : <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>; })()}
+          {snapGhost && (() => { const reporter = snapGhost.targetId.startsWith("__value__:") && dragPreview?.ids.length === 1 ? allBlocks(blocks).find(item => item.id === dragPreview.ids[0] && ["add","compare","true","false","get"].includes(item.kind)) : undefined; return reporter ? <div className="snap-ghost value-snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span className={"value-chip kind-" + reporter.kind}>{reporter.kind === "add" ? <Calculate block={reporter} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : reporter.kind === "compare" ? <Compare block={reporter} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : <ReporterContent block={reporter} updateBlock={updateBlock} />}</span></div> : <div className="snap-ghost" style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true"><span/>{snapGhost.count > 1 ? `${snapGhost.count} blocks` : "SNAP HERE"}</div>; })()}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>

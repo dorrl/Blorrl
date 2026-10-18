@@ -1,6 +1,8 @@
 import type { DragEvent, ReactNode } from "react";
 import type { Block } from "../../language";
 import { ReporterContent } from "./ReporterContent";
+import { Calculate } from "./Calculate";
+import { Compare } from "./Compare";
 
 type ValueSlotRenderer = (
   owner: Block,
@@ -17,7 +19,6 @@ type ValueSlotProps = {
   updateBlock: (id: string, patch: Partial<Block>) => void;
   onDrop: (event: DragEvent, targetId?: string) => void;
   onDragStart: (event: DragEvent, id: string) => void;
-  onDetach: (ownerId: string, field: "valueBlock" | "rightBlock") => void;
   renderValueSlot: ValueSlotRenderer;
 };
 
@@ -30,7 +31,6 @@ export function ValueSlot({
   updateBlock,
   onDrop,
   onDragStart,
-  onDetach,
   renderValueSlot,
 }: ValueSlotProps) {
   const nested = field === "valueBlock" ? owner.valueBlock : owner.rightBlock;
@@ -57,11 +57,7 @@ export function ValueSlot({
             draggable
             onDragStart={(event) => onDragStart(event, nested.id)}
           >
-            <ReporterContent
-              block={nested}
-              renderValueSlot={renderValueSlot}
-              updateBlock={updateBlock}
-            />
+            {nested.kind === "add" ? <Calculate block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : nested.kind === "compare" ? <Compare block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : <ReporterContent block={nested} updateBlock={updateBlock} />}
           </span>
         </>
       ) : (

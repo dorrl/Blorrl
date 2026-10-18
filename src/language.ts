@@ -2,8 +2,8 @@ export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "a
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
-  id: string; kind: BlockKind; value: string; name?: string; constant?: boolean; right?: string; valueBlock?: Block; rightBlock?: Block;
-  operator?: "+" | "-" | "*" | "/"; comparisonOperator?: "==" | ">=" | "<="; types?: ValueType[]; children?: Block[]; conditionBlock?: Block;
+  id: string; kind: BlockKind; value: string; attachedTo?: string; name?: string; constant?: boolean; right?: string; valueBlock?: Block; rightBlock?: Block;
+  operator?: "+" | "-" | "*" | "/"; comparisonOperator?: "==" | ">" | "<" | ">=" | "<="; types?: ValueType[]; children?: Block[]; conditionBlock?: Block;
   elseIf?: Branch[]; elseChildren?: Block[]; elseId?: string;
 };
 export type Compilation = { code: string; errors: string[] };
@@ -62,6 +62,8 @@ function evaluateBlockValue(block: Block, variables: Map<string, Value>): Value 
     const right = block.rightBlock ? evaluateBlockValue(block.rightBlock, variables) : evaluate(block.right || "0", variables);
     switch (block.comparisonOperator ?? "==") {
       case "==": return left === right;
+      case ">": return comparable(left, right, ">", false, true);
+      case "<": return comparable(left, right, "<");
       case ">=": return comparable(left, right, ">=", true, true);
       case "<=": return comparable(left, right, "<=", true);
     }
@@ -395,7 +397,8 @@ export function compileAssembly(blocks: Block[]): Compilation {
       } else {
         code.push("  mov rcx, rax", "  pop rax", "  cmp rax, rcx"); expressionStackDepth--;
       }
-      code.push(block.comparisonOperator === ">=" ? "  setge al" : block.comparisonOperator === "<=" ? "  setle al" : "  sete al", "  movzx rax, al");
+      const comparisonInstruction: Record<NonNullable<Block["comparisonOperator"]>, string> = { "==": "sete al", ">": "setg al", "<": "setl al", ">=": "setge al", "<=": "setle al" };
+      code.push("  " + comparisonInstruction[block.comparisonOperator ?? "=="], "  movzx rax, al");
       return "boolean";
     }
     errors.push("Block " + block.kind + " cannot be inserted into a value.");

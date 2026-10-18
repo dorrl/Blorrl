@@ -32,3 +32,10 @@ export function removeIds(items: Block[], ids: string[]): Block[] {
 export function putCondition(items: Block[], targetId: string, conditionBlock: Block): Block[] {
     return items.map(b => ({...b, conditionBlock:b.id===targetId ? conditionBlock : b.conditionBlock ? putCondition([b.conditionBlock],targetId,conditionBlock)[0] : undefined, children:putCondition(b.children??[],targetId,conditionBlock), elseIf:b.elseIf?.map(br=>({...br,children:putCondition(br.children,targetId,conditionBlock)})), elseChildren:b.elseChildren?putCondition(b.elseChildren,targetId,conditionBlock):undefined}));
   }
+
+/** Return only top-level blocks reachable from the fixed Start node. */
+export function getStartAttachedBlocks(items: Block[]): Block[] {
+  const ordered: Block[] = []; const used = new Set<string>(); let parentId = "__start";
+  while (true) { const next = items.find(block => block.attachedTo === parentId && !used.has(block.id)); if (!next) break; ordered.push(next); used.add(next.id); parentId = next.id; }
+  return ordered;
+}

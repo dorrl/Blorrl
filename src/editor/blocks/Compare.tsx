@@ -1,0 +1,5 @@
+import type { ReactNode } from "react";
+import type { Block } from "../../language";
+type ValueSlotRenderer = (owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) => ReactNode;
+type ExpressionBlockProps = { block: Block; renderValueSlot: ValueSlotRenderer; updateBlock: (id: string, patch: Partial<Block>) => void };
+export function Compare({block,renderValueSlot,updateBlock}:ExpressionBlockProps):ReactNode { if(block.kind!=="compare")return null; return <span className="inline-reporter kind-compare"><span className="inline-operator-fields">{renderValueSlot(block,"valueBlock",block.value,"Left value")}<select aria-label="Comparison operator" value={block.comparisonOperator??"=="} onChange={event=>updateBlock(block.id,{comparisonOperator:event.target.value as Block["comparisonOperator"]})} onClick={event=>event.stopPropagation()}><option>==</option><option>&gt;</option><option>&lt;</option><option>&gt;=</option><option>&lt;=</option></select>{renderValueSlot(block,"rightBlock",block.right??"0","Right value")}</span></span>; }

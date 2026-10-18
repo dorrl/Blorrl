@@ -2039,3 +2039,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   margin: 0;
   accent-color: #8cc8ff;
 }
+
+/* Category headings keep the block palette scannable as the catalog grows. */
+.catalog-category { display:flex; flex-direction:column; }
+.catalog-category-title { padding:10px 12px 5px; color:#818a98; font:9px var(--mono); letter-spacing:.8px; text-transform:uppercase; }
+.block-canvas { padding:0 90px 110px 0; scroll-padding-bottom:110px; scroll-padding-right:90px; }
