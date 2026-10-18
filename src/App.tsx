@@ -328,6 +328,7 @@ export default function App() {
       const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
       const isValueTarget = snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:");
+      const sourceRect = source.getBoundingClientRect();
       const ghost = isValueTarget ? document.createElement("span") : source.cloneNode(true) as HTMLElement;
       if (isValueTarget) {
         ghost.className = `value-chip kind-${libraryDragKind}`;
@@ -346,8 +347,13 @@ export default function App() {
       });
       Object.assign(ghost.style, {
         position: "relative", left: "auto", top: "auto", transform: "none", zoom: "1",
-        width: "", maxWidth: "", minWidth: "",
-        minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
+        // Top-level palette clones must retain the palette's already-resolved
+        // dimensions.  Re-running flex sizing inside the ghost caused Set to
+        // wrap and Print's value slot to overflow.
+        width: isValueTarget ? "" : `${sourceRect.width}px`,
+        maxWidth: isValueTarget ? "" : `${sourceRect.width}px`,
+        minWidth: "",
+        minHeight: isValueTarget ? "0" : `${sourceRect.height}px`, margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
       container.appendChild(ghost);
       return;
@@ -869,7 +875,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
+          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (libraryDragKind ? " library-drag-preview" : "") + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>

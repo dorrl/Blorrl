@@ -2126,6 +2126,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   flex-shrink: 0;
   filter: none;
 }
+/* A palette drag is presented as the real block, not a faded placeholder. */
+.snap-ghost.snap-ghost-stack.library-drag-preview { opacity: 1; }
+.snap-ghost.snap-ghost-stack.library-drag-preview.value-snap-ghost > .value-chip {
+  opacity: 1;
+  outline: 0;
+}
 
 
 /* Block palette previews reuse the canvas block silhouette and typography. */
