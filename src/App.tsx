@@ -508,7 +508,16 @@ export default function App() {
   function run() {
     setBusy(true);
     try {
-      const result = runProgram(compiled, stdin, executableBlocks);
+      // Execution always starts from the fixed Start node; loose canvas blocks are editor-only.
+      const attachedBlocks = getStartAttachedBlocks(blocks);
+      if (!attachedBlocks.length) {
+        setOutput("Nothing to run: connect a block to Start first.");
+        setStatus("idle");
+        return;
+      }
+      const attachedCompilation = compile(attachedBlocks);
+      if (attachedCompilation.errors.length) throw new Error(attachedCompilation.errors.join("\n"));
+      const result = runProgram(attachedCompilation, stdin, attachedBlocks);
       setOutput(result.error || result.output || "(no output)");
       setStatus(result.error ? "error" : "ran");
     } catch (error) { setOutput(error instanceof Error ? error.message : String(error)); setStatus("error"); }
@@ -517,8 +526,11 @@ export default function App() {
   async function downloadBuild(target: "assembly" | "exe") {
     setBusy(true);
     try {
-      if (assemblyCompiled.errors.length) throw new Error(assemblyCompiled.errors.join("\n"));
-      const response = await fetch("/server/api/build/" + target, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:assemblyCompiled.code})});
+      const attachedBlocks = getStartAttachedBlocks(blocks);
+      if (!attachedBlocks.length) throw new Error("Nothing to build: connect a block to Start first.");
+      const attachedAssembly = compileAssembly(attachedBlocks);
+      if (attachedAssembly.errors.length) throw new Error(attachedAssembly.errors.join("\n"));
+      const response = await fetch("/server/api/build/" + target, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:attachedAssembly.code})});
       if (!response.ok) throw new Error(await response.text());
       const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
       a.href=url;a.download=target==="exe"?"main.exe":"main.s";a.click();URL.revokeObjectURL(url);
@@ -587,7 +599,7 @@ export default function App() {
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "") + (dragPreview && snapGhost && dragPreview.ids.includes(block.id) ? " ghost-source-hidden" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
