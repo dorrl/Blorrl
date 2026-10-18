@@ -13,11 +13,10 @@ const reserved = new Set(["print", "let", "input", "get", "if", "repeat", "true"
 
 function selectedLiteralType(block: Block): ValueType {
   const types = block.types?.length ? block.types : ["number"];
-  const value = block.value.trim();
-  if (types.includes("number") && value !== "" && Number.isFinite(Number(value))) return "number";
-  if (types.includes("boolean") && (value === "true" || value === "false")) return "boolean";
+  if (types.includes("number")) return "number";
   if (types.includes("string")) return "string";
-  return types[0] ?? "number";
+  if (types.includes("boolean")) return "boolean";
+  return "number";
 }
 function literalForLanguage(block: Block): string {
   const type = selectedLiteralType(block);
