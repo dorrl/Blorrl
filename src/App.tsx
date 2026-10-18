@@ -350,7 +350,8 @@ export default function App() {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "canvas") {
-      const ids = selected.includes(payload.ids[0]) ? selected : payload.ids;
+      const nestedReporter = !!(event.target as HTMLElement).closest(".value-chip");
+      const ids = !nestedReporter && selected.includes(payload.ids[0]) ? selected : payload.ids;
       const origins: Record<string,{x:number;y:number}> = {};
       ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:104 + blocks.findIndex(b=>b.id===id)*104}; });
       dragOrigin.current = {x:event.clientX,y:event.clientY,ids,origins};
