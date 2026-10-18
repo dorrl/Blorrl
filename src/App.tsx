@@ -555,7 +555,7 @@ export default function App() {
     <section className="terminal">
       <div className="terminal-top"><div className="terminal-title"><Terminal size={15}/><strong>TERMINAL</strong><span className="terminal-divider">/</span><span>OUTPUT</span></div><div className="terminal-status"><span className={"status-dot " + status}/>{status==="ran"?"EXECUTED":status==="built"?"BUILD SUCCESS":status==="error"?"ERROR":"IDLE"}<button className="clear-button" onClick={()=>{setOutput("");setStatus("idle");}}>Clear</button></div></div>
       <div className="terminal-body"><div className="terminal-input"><label htmlFor="stdin">STDIN</label><textarea id="stdin" value={stdin} onChange={e=>setStdin(e.target.value)} placeholder="Type input here… (one line per read)" rows={2}/><span>INPUT BUFFER</span></div><div className="terminal-output"><div className="output-label"><span>STDOUT / STDERR</span><span>UTF-8</span></div><pre className={status==="error"?"error-text":""}>{output}</pre></div></div>
-      <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> NATIVE BUILD VIA ZIG</span><span>COMPILE <b>·</b> {compiled.errors.length || cCompiled.errors.length ? "ERRORS" : "INSTANT"}</span></div>
+      <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> NATIVE BUILD VIA ZIG</span><span>COMPILE <b>·</b> {compiled.errors.length || assemblyCompiled.errors.length ? "ERRORS" : "ASSEMBLY"}</span></div>
     </section>
     <footer className="statusbar"><span><span className="status-light"/> {serverOnline === false ? "Server connection unavailable" : "Ready"} <span className="statusbar-path">/ main.blorr</span></span><span>UTF-8 <b>·</b> TYPESCRIPT <b>·</b> <ChevronDown size={12}/></span></footer>
   </main>;
