@@ -2168,8 +2168,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   top: auto;
   width: 330px;
   max-width: none;
-  margin: 0 0 -34px;
-  transform: scale(.58);
+  --palette-preview-scale: .58;
+  margin: 0;
+  transform: none;
+  zoom: var(--palette-preview-scale);
   transform-origin: top left;
   box-sizing: border-box;
   pointer-events: none;
