@@ -222,7 +222,6 @@ export default function App() {
           const origin = drag.origins[id];
           if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
         });
-      } else {
         setBlocks(current => current.map(block => drag.ids.includes(block.id) ? ({ ...block, attachedTo: undefined }) : block));
       }
 
