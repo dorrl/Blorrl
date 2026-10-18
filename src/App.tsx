@@ -267,10 +267,40 @@ export default function App() {
     setSelected([block.id]); setStatus("idle");
   }
 
+  function detachValueBlock(ownerId: string, field: "valueBlock" | "rightBlock") {
+    const canvas = canvasRef.current;
+    const ownerElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`);
+    const canvasRect = canvas?.getBoundingClientRect();
+    const ownerRect = ownerElement?.getBoundingClientRect();
+    const point = canvasRect && ownerRect ? {
+      x: Math.max(12, ownerRect.left - canvasRect.left + canvas.scrollLeft + 24),
+      y: Math.max(64, ownerRect.top - canvasRect.top + canvas.scrollTop + 44),
+    } : {x:42,y:104};
+    setBlocks(current => {
+      const owner = allBlocks(current).find(block => block.id === ownerId);
+      const nested = owner?.[field];
+      if (!nested) return current;
+      const clearSlot = (items: Block[]): Block[] => items.map(block => ({
+        ...block,
+        ...(block.id === ownerId ? (field === "valueBlock" ? {valueBlock:undefined} : {rightBlock:undefined}) : {}),
+        conditionBlock:block.conditionBlock ? clearSlot([block.conditionBlock])[0] : undefined,
+        valueBlock:block.id === ownerId && field === "valueBlock" ? undefined : block.valueBlock ? clearSlot([block.valueBlock])[0] : undefined,
+        rightBlock:block.id === ownerId && field === "rightBlock" ? undefined : block.rightBlock ? clearSlot([block.rightBlock])[0] : undefined,
+        children:clearSlot(block.children ?? []),
+        elseIf:block.elseIf?.map(branch=>({...branch,children:clearSlot(branch.children)})),
+        elseChildren:block.elseChildren ? clearSlot(block.elseChildren) : undefined,
+      }));
+      return [...clearSlot(current), nested];
+    });
+    setPositions(current => ({...current,[allBlocks(blocks).find(block => block.id === ownerId)?.[field]?.id ?? ""]:point}));
+    setSelected([allBlocks(blocks).find(block => block.id === ownerId)?.[field]?.id ?? ownerId]);
+    setStatus("idle");
+  }
+
   function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
     const nested = field === "valueBlock" ? owner.valueBlock : owner.rightBlock;
-    return <div className="value-slot" onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("value-hover"); }} onDragLeave={e => e.currentTarget.classList.remove("value-hover")} onDrop={e => { e.currentTarget.classList.remove("value-hover"); onDrop(e, `value:${owner.id}:${field}`); }}>
-      {nested ? <><span className={"value-chip kind-" + nested.kind} draggable onDragStart={e => onDragStart(e, {source:"canvas",ids:[nested.id]})}>{renderReporter(nested)}</span><button className="value-remove" aria-label="Remove nested value" onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); updateBlock(owner.id, field === "valueBlock" ? {valueBlock:undefined} : {rightBlock:undefined}); }}>×</button></> : <input className="value-input" aria-label={ariaLabel} value={value} onChange={e => updateBlock(owner.id, field === "valueBlock" ? {value:e.target.value} : {right:e.target.value})} onClick={e => e.stopPropagation()} />}
+    return <div className="value-slot" data-value-for={owner.id} data-value-field={field} onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("value-hover"); }} onDragLeave={e => e.currentTarget.classList.remove("value-hover")} onDrop={e => { e.currentTarget.classList.remove("value-hover"); onDrop(e, `value:${owner.id}:${field}`); }}>
+      {nested ? <><span className={"value-chip kind-" + nested.kind} draggable onDragStart={e => onDragStart(e, {source:"canvas",ids:[nested.id]})}>{renderReporter(nested)}</span><button className="value-eject" title="Move block to canvas" aria-label="Move nested value to canvas" onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); detachValueBlock(owner.id, field); }}>↗</button><button className="value-remove" aria-label="Remove nested value" onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); updateBlock(owner.id, field === "valueBlock" ? {valueBlock:undefined} : {rightBlock:undefined}); }}>×</button></> : <input className="value-input" aria-label={ariaLabel} value={value} onChange={e => updateBlock(owner.id, field === "valueBlock" ? {value:e.target.value} : {right:e.target.value})} onClick={e => e.stopPropagation()} />}
     </div>;
   }
   function renderReporter(block: Block): ReactNode {
