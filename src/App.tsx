@@ -311,10 +311,13 @@ export default function App() {
         element.setAttribute("disabled", "");
         element.setAttribute("tabindex", "-1");
       });
-      const canvasWidth = canvasRef.current.clientWidth;
+      // Read the rendered preview's used width before removing its palette-only
+      // scaling class. Do not cap it to the canvas width: that makes the ghost
+      // narrower than the block that will actually be inserted.
+      const sourceWidth = getComputedStyle(source).width;
       Object.assign(ghost.style, {
-        position: "relative", left: "auto", top: "auto", width: "max-content",
-        maxWidth: `${Math.max(0, canvasWidth - 24)}px`, minWidth: "0",
+        position: "relative", left: "auto", top: "auto", transform: "none",
+        width: sourceWidth, maxWidth: "none", minWidth: "0",
         minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
       container.appendChild(ghost);
