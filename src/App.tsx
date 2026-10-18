@@ -142,7 +142,7 @@ export default function App() {
       const canBeCondition = !!movingElement && ["kind-true","kind-false","kind-compare"].some(kind => movingElement.classList.contains(kind));
       const canBeValue = !!movingElement && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>movingElement.classList.contains(kind));
       const valueCandidate = canBeValue ? Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
-        .map(slot=>{const rect=slot.getBoundingClientRect();const inside=event.clientX>=rect.left-4&&event.clientX<=rect.right+4&&event.clientY>=rect.top-4&&event.clientY<=rect.bottom+4;return inside?{id:"__value__:"+slot.dataset.valueFor+":"+slot.dataset.valueField,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop,distance:0,horizontal:true}:null;}).find(item=>item!==null)??null:null;
+        .map(slot=>{const rect=slot.getBoundingClientRect();const inside=event.clientX>=rect.left-4&&event.clientX<=rect.right+4&&event.clientY>=rect.top-4&&event.clientY<=rect.bottom+4;return inside?{id:"__value__:"+slot.dataset.valueFor+":"+slot.dataset.valueField,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop,distance:0,horizontal:true,area:rect.width*rect.height}:null;}).filter((item):item is {id:string;x:number;y:number;distance:number;horizontal:boolean;area:number}=>item!==null).sort((a,b)=>a.area-b.area)[0]??null:null;
       const conditionCandidate = canBeCondition ? Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => {
           const rect = slot.getBoundingClientRect();
