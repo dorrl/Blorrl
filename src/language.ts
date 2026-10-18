@@ -32,14 +32,6 @@ function literalForRuntime(block: Block): Value {
   if (block.value.trim() === "" || !Number.isFinite(value)) throw new Error(`Variable "${block.name ?? "value"}" needs a numeric literal.`);
   return value;
 }
-function literalForC(block: Block): string {
-  const type = selectedLiteralType(block);
-  if (type === "string") return JSON.stringify(block.value);
-  if (type === "boolean") return block.value.trim() === "true" ? "1" : "0";
-  const value = Number(block.value);
-  if (block.value.trim() === "" || !Number.isFinite(value)) throw new Error(`Variable "${block.name ?? "value"}" needs a numeric literal.`);
-  return String(value);
-}
 function blockExpression(block: Block): string {
   if (block.kind === "true") return "true";
   if (block.kind === "false") return "false";
@@ -498,72 +490,4 @@ export function compileAssembly(blocks: Block[]): Compilation {
     ...data,
   ];
   return { code: assembly.join("\n") + "\n", errors };
-}
-
-export function compileC(blocks: Block[]): Compilation {
-  const errors: string[] = [];
-  const names = new Map<string, ValueType>();
-  function scan(items: Block[]) {
-    for (const b of items) {
-      if (b.kind === "let" || b.kind === "input") {
-        const name = b.name?.trim() ?? "";
-        if (!identifier.test(name) || reserved.has(name)) errors.push("Invalid variable name \"" + name + "\".");
-        else names.set(name, selectedLiteralType(b));
-      }
-      if (b.conditionBlock) scan([b.conditionBlock]);
-      scan(b.children ?? []);
-      for (const branch of b.elseIf ?? []) scan(branch.children);
-      if (b.elseChildren) scan(b.elseChildren);
-    }
-  }
-  scan(blocks);
-  const expr = (s: string) => {
-    if (!/^[\w\s"'().,+\-*/%<>=!&|\\]+$/.test(s)) throw new Error("Expression contains unsupported characters.");
-    return s.replace(/\btrue\b/g, "1").replace(/\bfalse\b/g, "0");
-  };
-  const cCompare = (left: string, operator: "==" | ">=" | "<=", right: string) => {
-    const isString = (value: string) => {
-      const trimmed = value.trim();
-      return (trimmed.startsWith('"') && trimmed.endsWith('"')) || names.get(trimmed) === "string";
-    };
-    if (isString(left) || isString(right)) return "strcmp(" + expr(left) + ", " + expr(right) + ") " + operator + " 0";
-    return "(" + expr(left) + ") " + operator + " (" + expr(right) + ")";
-  };
-  const cCondition = (block: Block) => block.kind === "compare"
-    ? cCompare(block.value || "0", block.comparisonOperator ?? "==", block.right || "0")
-    : expr(conditionExpression(block));
-  const lines = ["#include <stdio.h>", "#include <stdlib.h>", "#include <string.h>", "int main(void) {"];
-  for (const [name,type] of names) lines.push("  " + (type === "string" ? "const char *" : "double") + " " + name + " = " + (type === "string" ? '""' : "0") + ";");
-  let temp = 0;
-  function emit(items: Block[], depth: number) {
-    const pad = "  ".repeat(depth);
-    for (const b of items) try {
-      if (b.kind === "print") {
-        lines.push(pad + "printf(\"%s\\n\", " + JSON.stringify(b.value) + ");");
-      } else if (b.kind === "get") {
-        const name = b.value.trim();
-        if (!identifier.test(name) || !names.has(name)) errors.push("Unknown variable \"" + name + "\".");
-        else lines.push(pad + "printf(" + (names.get(name) === "string" ? '"%s\\\\n", ' : '"%.15g\\\\n", ') + name + ");");
-      } else if (b.kind === "let") lines.push(pad + (b.name?.trim() ?? "value") + " = " + literalForC(b) + ";");
-      else if (b.kind === "input") {
-        const name = b.name?.trim() ?? "value";
-        if (names.get(name) === "string") lines.push(`${pad}{ static char buf_${name}[4096]; if (fgets(buf_${name}, sizeof(buf_${name}), stdin)) { buf_${name}[strcspn(buf_${name}, "\\n")] = 0; ${name} = buf_${name}; } }`);
-        else lines.push(`${pad}scanf("%lf", &${name});`);
-      } else if (b.kind === "add") lines.push(`${pad}printf("%.15g\\n", (${expr(b.value || "0")}) ${b.operator ?? "+"} (${expr(b.right || "1")}));`);
-      else if (b.kind === "true") lines.push(pad + "printf(\"%s\\n\", \"true\");");
-      else if (b.kind === "false") lines.push(pad + "printf(\"%s\\n\", \"false\");");
-      else if (b.kind === "compare") lines.push(pad + "printf(\"%d\\n\", " + cCompare(b.value || "0", b.comparisonOperator ?? "==", b.right || "0") + ");");
-      else if (b.kind === "if") {
-        lines.push(pad + "if (" + (b.conditionBlock ? cCondition(b.conditionBlock) : "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
-        for (const br of b.elseIf ?? []) { lines.push(pad+"else if ("+expr(br.condition||"0")+") {");emit(br.children,depth+1);lines.push(pad+"}"); }
-        if (b.elseChildren) {lines.push(pad+"else {");emit(b.elseChildren,depth+1);lines.push(pad+"}");}
-      } else if (b.kind === "repeat") {
-        const i = "blorrl_i_" + temp++;
-        lines.push(pad + "for (int " + i + " = 0; " + i + " < (int)(" + expr(b.value || "1") + ") && " + i + " < 10000; ++" + i + ") {");
-        emit(b.children ?? [],depth+1); lines.push(pad+"}");
-      }
-    } catch(error) { errors.push(error instanceof Error ? error.message : String(error)); }
-  }
-  emit(blocks,1); lines.push("  return 0;","}");
-  return {code:lines.join("\n"),errors};
 }
