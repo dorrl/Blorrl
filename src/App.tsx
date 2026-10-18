@@ -13,6 +13,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
 import { allBlocks, putCondition, putValue, removeIds } from "./editor/blockTree";
+import { createBlock, updateBlockTree } from "./editor/blockOperations";
 import { useCanvasPan } from "./editor/useCanvasPan";
 
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
@@ -237,24 +238,11 @@ export default function App() {
 
 
   function updateBlock(id: string, patch: Partial<Block>) {
-    const update = (items: Block[]): Block[] => items.map(block => block.id === id ? {...block,...patch} : ({
-      ...block, conditionBlock:block.conditionBlock ? update([block.conditionBlock])[0] : undefined, valueBlock:block.valueBlock ? update([block.valueBlock])[0] : undefined, rightBlock:block.rightBlock ? update([block.rightBlock])[0] : undefined, children:update(block.children ?? []),
-      elseIf:block.elseIf?.map(branch=>({...branch,children:update(branch.children)})),
-      elseChildren:block.elseChildren ? update(block.elseChildren) : undefined,
-    }));
-    setBlocks(update); setStatus("idle");
-  }
-  function makeBlock(kind: BlockKind): Block {
-    const block: Block = {id:crypto.randomUUID(),kind,value:kind==="print" ? "Hello!" : kind==="get" ? "value" : kind==="true" ? "true" : kind==="false" ? "false" : "1"};
-    if (kind==="let" || kind==="input") {block.name="value";block.types=["number"];}
-    if (kind==="add") {block.right="1";block.operator="+";}
-    if (kind==="compare") {block.right="0";block.comparisonOperator="==";}
-    if (kind==="if") {block.children=[];block.conditionBlock={id:crypto.randomUUID(),kind:"false",value:"false"};}
-    if (kind==="repeat") block.children=[];
-    return block;
+    setBlocks(current => updateBlockTree(current, id, patch));
+    setStatus("idle");
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
-    const block = makeBlock(kind);
+    const block = createBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
     const targetPosition = beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
@@ -436,13 +424,13 @@ export default function App() {
       const valueTarget = targetId?.startsWith("value:") ? targetId.slice("value:".length).split(":") : undefined;
       if (valueTarget && valueTarget.length===2) {
         const [ownerId,field]=valueTarget;
-        const child=payload.source==="library"?makeBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
+        const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
         if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
         return;
       }
       const conditionTarget = targetId?.startsWith("condition:") ? targetId.slice("condition:".length) : undefined;
       if (conditionTarget) {
-        if (payload.source === "library") dropCondition(conditionTarget,makeBlock(payload.kind));
+        if (payload.source === "library") dropCondition(conditionTarget,createBlock(payload.kind));
         else {
           const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
           if (child) dropCondition(conditionTarget,child,payload.ids);
@@ -455,7 +443,7 @@ export default function App() {
       const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
       const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
       if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
-        if(payload.source==="library") insertNested(targetId,makeBlock(payload.kind));
+        if(payload.source==="library") insertNested(targetId,createBlock(payload.kind));
         else nestBlocks(targetId,payload.ids);
       } else {
         const rect=canvasRef.current?.getBoundingClientRect();
