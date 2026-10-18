@@ -17,7 +17,6 @@ type RepeatBlockProps = {
 export function RepeatBlock({ block, renderValueSlot }: RepeatBlockProps) {
   return (
     <label>
-      COUNT
       {renderValueSlot(block, "valueBlock", block.value, "Repeat count")}
     </label>
   );

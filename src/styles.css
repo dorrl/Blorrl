@@ -636,9 +636,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   filter:brightness(1.07);
   box-shadow:0 6px 15px #0005
 }
-.block-card.selected {
-  z-index:4;
-}
 .block-card:active {
   cursor:grabbing
 }

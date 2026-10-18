@@ -63,34 +63,6 @@ export function ValueSlot({
               updateBlock={updateBlock}
             />
           </span>
-          <button
-            className="value-eject"
-            title="Move block to canvas"
-            aria-label="Move nested value to canvas"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDetach(owner.id, field);
-            }}
-          >
-            ↗
-          </button>
-          <button
-            className="value-remove"
-            aria-label="Remove nested value"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              updateBlock(
-                owner.id,
-                field === "valueBlock"
-                  ? { valueBlock: undefined }
-                  : { rightBlock: undefined },
-              );
-            }}
-          >
-            ×
-          </button>
         </>
       ) : (
         <input

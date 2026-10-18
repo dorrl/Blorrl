@@ -1,5 +1,5 @@
 import type { Block, ValueType } from "../../language";
-import { ValueTypeSelector } from "./ValueTypeSelector";
+import { ValueTypeSelector } from "./Type";
 
 type InputBlockProps = {
   block: Block;
@@ -20,7 +20,7 @@ export function InputBlock({
   return (
     <>
       <label>
-        STORE AS
+        At
         <input
           value={block.name ?? ""}
           onChange={(event) => updateBlock(block.id, { name: event.target.value })}
@@ -34,7 +34,6 @@ export function InputBlock({
         onToggle={onToggleTypePanel}
         onUpdateType={onUpdateType}
       />
-      <span className="field-hint">Reads one line from terminal input</span>
     </>
   );
 }

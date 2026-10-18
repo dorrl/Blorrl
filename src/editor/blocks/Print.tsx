@@ -17,7 +17,6 @@ type PrintBlockProps = {
 export function PrintBlock({ block, renderValueSlot }: PrintBlockProps) {
   return (
     <label className="wide-field">
-      TEXT
       {renderValueSlot(
         block,
         "valueBlock",

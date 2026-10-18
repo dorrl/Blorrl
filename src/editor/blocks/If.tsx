@@ -39,7 +39,6 @@ export function IfConditionField({
         onDrop(event, "condition:" + block.id);
       }}
     >
-      <span className="condition-caption">IF</span>
       {condition ? (
         condition.kind === "compare" ? (
           <>
@@ -68,7 +67,7 @@ export function IfConditionField({
           <strong>{condition.kind === "true" ? "True" : "False"}</strong>
         )
       ) : (
-        <span>Drop True / False / ==</span>
+        <span>Drop Boolean</span>
       )}
     </div>
   );

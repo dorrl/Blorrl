@@ -36,9 +36,6 @@ export function ControlBlockBody({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => onDrop(event, block.id)}
     >
-      <div className="nested-label">
-        {block.kind === "if" ? "THEN" : "REPEAT BODY"} <span>DROP BLOCKS HERE</span>
-      </div>
       {(block.children ?? []).map((child, index) => (
         <div
           className="nested-item"

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Block, ValueType } from "../../language";
-import { ValueTypeSelector } from "./ValueTypeSelector";
+import { ValueTypeSelector } from "./Type";
 
 type ValueSlotRenderer = (
   owner: Block,
@@ -29,13 +29,14 @@ export function VariableBlock({
 }: VariableBlockProps) {
   return (
     <>
-      <label>
-        NAME
-        <input
-          value={block.name ?? ""}
-          onChange={(event) => updateBlock(block.id, { name: event.target.value })}
-          onClick={(event) => event.stopPropagation()}
+      <input
+        value={block.name ?? ""}
+        onChange={(event) => updateBlock(block.id, { name: event.target.value })}
+        onClick={(event) => event.stopPropagation()}
         />
+      <label>
+        =
+        {renderValueSlot(block, "valueBlock", block.value, "Variable value")}
       </label>
       <label className="const-toggle">
         <input
@@ -45,10 +46,6 @@ export function VariableBlock({
           onClick={(event) => event.stopPropagation()}
         />{" "}
         const
-      </label>
-      <label>
-        VALUE
-        {renderValueSlot(block, "valueBlock", block.value, "Variable value")}
       </label>
       <ValueTypeSelector
         block={block}

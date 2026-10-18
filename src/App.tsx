@@ -4,12 +4,12 @@ import { Play, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripV
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
 import { ReporterContent } from "./editor/blocks/ReporterContent";
-import { PrintBlock } from "./editor/blocks/PrintBlock";
-import { VariableBlock } from "./editor/blocks/VariableBlock";
-import { InputBlock } from "./editor/blocks/InputBlock";
-import { IfConditionField } from "./editor/blocks/IfConditionField";
-import { RepeatBlock } from "./editor/blocks/RepeatBlock";
-import { ValueSlot } from "./editor/blocks/ValueSlot";
+import { PrintBlock } from "./editor/blocks/Print";
+import { VariableBlock } from "./editor/blocks/VariableSet";
+import { InputBlock } from "./editor/blocks/Input";
+import { IfConditionField } from "./editor/blocks/If";
+import { RepeatBlock } from "./editor/blocks/Repeat";
+import { ValueSlot } from "./editor/blocks/Value";
 import { ControlBlockBody } from "./editor/blocks/ControlBlockBody";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
