@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Play, Hammer, Plus, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
-import { compile, compileC, runProgram, type Block, type BlockKind, type ValueType } from "./language";
+import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 
 const initialBlocks: Block[] = [
   { id: "b1", kind: "print", value: "Hello from Blorrl!" },
@@ -15,10 +15,10 @@ const catalog: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "get", label: "Get variable", hint: "Output a variable value" },
   { kind: "if", label: "If condition", hint: "Run a block when true" },
   { kind: "repeat", label: "Repeat", hint: "Repeat a number of times" },
-  { kind: "add", label: "Calculate", hint: "Calculate with two numbers" },
+  { kind: "add", label: "Calculate", hint: "Drag into a value socket" },
   { kind: "true", label: "True", hint: "Boolean true value" },
   { kind: "false", label: "False", hint: "Boolean false value" },
-  { kind: "compare", label: "Compare", hint: "Compare two values (==, >=, <=)" },
+  { kind: "compare", label: "==", hint: "Compare values; drag into a value socket" },
 ];
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
@@ -51,9 +51,9 @@ export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const marqueeStart = useRef<{x:number;y:number}|null>(null);
   const compiled = useMemo(() => compile(blocks), [blocks]);
-  const cCompiled = useMemo(() => compileC(blocks), [blocks]);
+  const assemblyCompiled = useMemo(() => compileAssembly(blocks), [blocks]);
   const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
-  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
+  const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...(b.valueBlock ? allBlocks([b.valueBlock]) : []), ...(b.rightBlock ? allBlocks([b.rightBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
   const totalBlocks = allBlocks(blocks).length;
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function App() {
       setPositions(next);
 
       const candidate = Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
-        .filter(element => !drag.ids.includes(element.dataset.blockId ?? ""))
+        .filter(element => !drag.ids.includes(element.dataset.blockId ?? "") && !["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>element.classList.contains(kind)))
         .map(element => {
           const rect = element.getBoundingClientRect();
           const id = element.dataset.blockId;
@@ -140,13 +140,16 @@ export default function App() {
       const canvasRect = canvas.getBoundingClientRect();
       const movingElement = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const canBeCondition = !!movingElement && ["kind-true","kind-false","kind-compare"].some(kind => movingElement.classList.contains(kind));
+      const canBeValue = !!movingElement && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>movingElement.classList.contains(kind));
+      const valueCandidate = canBeValue ? Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
+        .map(slot=>{const rect=slot.getBoundingClientRect();const inside=event.clientX>=rect.left-4&&event.clientX<=rect.right+4&&event.clientY>=rect.top-4&&event.clientY<=rect.bottom+4;return inside?{id:"__value__:"+slot.dataset.valueFor+":"+slot.dataset.valueField,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop,distance:0,horizontal:true}:null;}).find(item=>item!==null)??null:null;
       const conditionCandidate = canBeCondition ? Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => {
           const rect = slot.getBoundingClientRect();
           const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
           return inside ? {id:"__condition__:"+slot.dataset.conditionFor, x:rect.left-canvasRect.left+canvas.scrollLeft, y:rect.top-canvasRect.top+canvas.scrollTop, distance:0, horizontal:true} : null;
         }).find(item => item !== null) ?? null : null;
-      const snap = conditionCandidate ?? (startCandidate && startCandidate.distance < 18 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
+      const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 18 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
         : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
@@ -163,7 +166,16 @@ export default function App() {
       if (ghost) {
         const canvas = canvasRef.current;
         const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
-        if (ghost.targetId.startsWith("__condition__:")) {
+        if (ghost.targetId.startsWith("__value__:")) {
+          const [,targetId,field] = ghost.targetId.split(":");
+          setBlocks(current=>{
+            const child=allBlocks(current).find(block=>drag.ids.includes(block.id));
+            if(!child || !["add","compare","true","false","get"].includes(child.kind) || !targetId || (field!=="valueBlock"&&field!=="rightBlock")) return current;
+            return putValue(removeIds(current,drag.ids),targetId,field,child);
+          });
+          drag.ids.forEach(id=>delete next[id]);
+          setSelected(drag.ids.slice(0,1));
+        } else if (ghost.targetId.startsWith("__condition__:")) {
           const targetId = ghost.targetId.slice("__condition__:".length);
           setBlocks(current => {
             const child = current.find(block => drag.ids.includes(block.id));
@@ -227,6 +239,7 @@ export default function App() {
     return block;
   }
   function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
+    if (["add","compare","true","false","get"].includes(kind) && !beforeId && !dropPoint) { setOutput("Drag this value block into a value socket."); setStatus("idle"); return; }
     const block = makeBlock(kind);
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId ? blocks.findIndex(item => item.id === beforeId) : -1;
@@ -248,8 +261,17 @@ export default function App() {
     setSelected([block.id]); setStatus("idle");
   }
   function removeIds(items: Block[], ids: string[]): Block[] {
-    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, conditionBlock:b.conditionBlock && !ids.includes(b.conditionBlock.id) ? b.conditionBlock : undefined, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
+    return items.filter(b => !ids.includes(b.id)).map(b => ({...b, conditionBlock:b.conditionBlock && !ids.includes(b.conditionBlock.id) ? b.conditionBlock : undefined, valueBlock:b.valueBlock && !ids.includes(b.valueBlock.id) ? b.valueBlock : undefined, rightBlock:b.rightBlock && !ids.includes(b.rightBlock.id) ? b.rightBlock : undefined, children: removeIds(b.children ?? [], ids), elseIf: b.elseIf?.map(br => ({...br, children: removeIds(br.children, ids)})), elseChildren: b.elseChildren ? removeIds(b.elseChildren, ids) : undefined}));
   }
+  function putValue(items: Block[], targetId: string, field: "valueBlock" | "rightBlock", valueBlock: Block): Block[] {
+    return items.map(b=>({...b,[field]:b.id===targetId?valueBlock:b[field],conditionBlock:b.conditionBlock?putValue([b.conditionBlock],targetId,field,valueBlock)[0]:undefined,valueBlock:b.id===targetId&&field==="valueBlock"?valueBlock:b.valueBlock?putValue([b.valueBlock],targetId,field,valueBlock)[0]:undefined,rightBlock:b.id===targetId&&field==="rightBlock"?valueBlock:b.rightBlock?putValue([b.rightBlock],targetId,field,valueBlock)[0]:undefined,children:putValue(b.children??[],targetId,field,valueBlock),elseIf:b.elseIf?.map(br=>({...br,children:putValue(br.children,targetId,field,valueBlock)})),elseChildren:b.elseChildren?putValue(b.elseChildren,targetId,field,valueBlock):undefined}));
+  }
+  function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
+    const nested=owner[field];
+    const label=nested?.kind==="add" ? `${nested.valueBlock ? valueLabel(nested.valueBlock) : nested.value || "0"} ${nested.operator??"+"} ${nested.rightBlock ? valueLabel(nested.rightBlock) : nested.right||"1"}` : nested?.kind==="compare" ? `${nested.valueBlock ? valueLabel(nested.valueBlock) : nested.value||"0"} ${nested.comparisonOperator??"=="} ${nested.rightBlock ? valueLabel(nested.rightBlock) : nested.right||"0"}` : nested?.kind==="get" ? `get ${nested.value}` : nested?.kind==="true" ? "true" : nested?.kind==="false" ? "false" : "";
+    return <div className={"value-slot"+(nested?" filled":"")} data-value-for={owner.id} data-value-field={field} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("value-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("value-hover")} onDrop={e=>{e.currentTarget.classList.remove("value-hover");onDrop(e,`value:${owner.id}:${field}`);}}>{nested?<><span className={"value-chip kind-"+nested.kind}>{label}</span><button className="value-remove" aria-label="Remove nested value" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();updateBlock(owner.id,{[field]:undefined});}}>×</button></>:<input className="value-input" aria-label={ariaLabel} value={value} onChange={e=>updateBlock(owner.id,{[field==="valueBlock"?"value":"right"]:e.target.value})} onClick={e=>e.stopPropagation()}/>}</div>;
+  }
+  function valueLabel(block: Block): string { return block.kind==="get" ? `get ${block.value}` : block.kind==="true" ? "true" : block.kind==="false" ? "false" : block.kind==="compare" ? `${block.value} ${block.comparisonOperator??"=="} ${block.right??"0"}` : `${block.value} ${block.operator??"+"} ${block.right??"1"}`; }
   function putCondition(items: Block[], targetId: string, conditionBlock: Block): Block[] {
     return items.map(b => ({...b, conditionBlock:b.id===targetId ? conditionBlock : b.conditionBlock ? putCondition([b.conditionBlock],targetId,conditionBlock)[0] : undefined, children:putCondition(b.children??[],targetId,conditionBlock), elseIf:b.elseIf?.map(br=>({...br,children:putCondition(br.children,targetId,conditionBlock)})), elseChildren:b.elseChildren?putCondition(b.elseChildren,targetId,conditionBlock):undefined}));
   }
@@ -363,6 +385,13 @@ export default function App() {
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw)return;
     try {
       const payload=JSON.parse(raw) as DragPayload;
+      const valueTarget = targetId?.startsWith("value:") ? targetId.slice("value:".length).split(":") : undefined;
+      if (valueTarget && valueTarget.length===2) {
+        const [ownerId,field]=valueTarget;
+        const child=payload.source==="library"?makeBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
+        if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
+        return;
+      }
       const conditionTarget = targetId?.startsWith("condition:") ? targetId.slice("condition:".length) : undefined;
       if (conditionTarget) {
         if (payload.source === "library") dropCondition(conditionTarget,makeBlock(payload.kind));
@@ -423,14 +452,14 @@ export default function App() {
     finally { setBusy(false); }
   }
   function build() {
-    setOutput(compiled.errors.length ? compiled.errors.join("\n") : compiled.code);
-    setStatus(compiled.errors.length ? "error" : "built");
+    setOutput(assemblyCompiled.errors.length ? assemblyCompiled.errors.join("\n") : assemblyCompiled.code);
+    setStatus(assemblyCompiled.errors.length ? "error" : "built");
   }
   async function downloadBuild(target: "assembly" | "exe") {
     setBusy(true);
     try {
-      if (cCompiled.errors.length) throw new Error(cCompiled.errors.join("\n"));
-      const response = await fetch("/server/api/build/" + target, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:cCompiled.code})});
+      if (assemblyCompiled.errors.length) throw new Error(assemblyCompiled.errors.join("\n"));
+      const response = await fetch("/server/api/build/" + target, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:assemblyCompiled.code})});
       if (!response.ok) throw new Error(await response.text());
       const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
       a.href=url;a.download=target==="exe"?"main.exe":"main.s";a.click();URL.revokeObjectURL(url);
@@ -439,9 +468,9 @@ export default function App() {
     finally {setBusy(false);}
   }
   function exportSource() {
-    const blob = new Blob([compiled.code], { type: "text/plain" });
+    const blob = new Blob([assemblyCompiled.code], { type: "text/plain" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
-    a.href = url; a.download = "main.blorr"; a.click(); URL.revokeObjectURL(url);
+    a.href = url; a.download = "main.s"; a.click(); URL.revokeObjectURL(url);
   }
 
   return <main className="studio">
@@ -476,8 +505,10 @@ export default function App() {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea")) return;
             e.preventDefault();
             e.stopPropagation();
-            const ids = selected.includes(block.id) ? selected : [block.id];
-            if (!selected.includes(block.id)) setSelected(ids);
+            const selectedIds = selected.includes(block.id) ? selected : [block.id];
+            const blockIndex = blocks.findIndex(item => item.id === block.id);
+            const ids = selectedIds.length > 1 ? selectedIds : blocks.slice(Math.max(0,blockIndex)).map(item=>item.id);
+            if (!selected.includes(block.id)) setSelected(selectedIds);
             const origins: Record<string,{x:number;y:number}> = {};
             ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:104 + blocks.findIndex(item=>item.id===id)*104}; });
             blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
@@ -488,13 +519,13 @@ export default function App() {
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
               <div className="block-content"><div className="block-type"><span className={"type-icon " + block.kind}><Blocks size={13}/></span><strong>{catalog.find(c=>c.kind===block.kind)?.label ?? block.kind}</strong><span className="block-kind">{block.kind.toUpperCase()}</span></div>
                 <div className="block-fields">
-                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Variable types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}</>}
+                  {block.kind === "let" && <><label>NAME<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><label>VALUE{renderValueSlot(block,"valueBlock",block.value,"Variable value")}</label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Variable types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}</>}
                   {block.kind === "input" && <><label>STORE AS<input value={block.name ?? ""} onChange={e=>updateBlock(block.id,{name:e.target.value})} onClick={e=>e.stopPropagation()} /></label><button className="type-panel-button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setTypePanelFor(typePanelFor===block.id?null:block.id)}}>Types · {(block.types ?? ["number"]).join(", ")}</button>{typePanelFor===block.id && <div className="type-panel" onPointerDown={e=>e.stopPropagation()}><strong>Input types</strong>{(["number","string","boolean"] as ValueType[]).map(type=><label key={type}><input type="checkbox" checked={(block.types ?? ["number"]).includes(type)} onChange={e=>updateType(block.id,type,e.target.checked)}/>{type}</label>)}</div>}<span className="field-hint">Reads one line from terminal input</span></>}
-                  {block.kind === "print" && <label className="wide-field">TEXT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
+                  {block.kind === "print" && <label className="wide-field">TEXT{renderValueSlot(block,"valueBlock",block.value,"Print text or drop a value block")}</label>}
                   {block.kind === "get" && <label>VARIABLE<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
                   {block.kind === "if" && <div className="condition-slot" data-condition-for={block.id} onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("condition-hover");}} onDragLeave={e=>e.currentTarget.classList.remove("condition-hover")} onDrop={e=>{e.currentTarget.classList.remove("condition-hover");onDrop(e,"condition:"+block.id);}}><span className="condition-caption">IF</span>{block.conditionBlock ? <><strong>{block.conditionBlock.kind==="true"?"True":block.conditionBlock.kind==="false"?"False":"Compare"}</strong>{block.conditionBlock.kind==="compare" && <span>{block.conditionBlock.value} {block.conditionBlock.comparisonOperator??"=="} {block.conditionBlock.right??"0"}</span>}</> : <span>Drop True / False / Compare</span>}</div>}
                   {block.kind === "repeat" && <label>COUNT<input value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /></label>}
-                  {(block.kind === "add" || block.kind === "compare") && <div className="operator-fields"><input aria-label="Left operand" value={block.value} onChange={e=>updateBlock(block.id,{value:e.target.value})} onClick={e=>e.stopPropagation()} /><select aria-label="Operator" value={block.kind === "compare" ? block.comparisonOperator ?? "==" : block.operator ?? "+"} onChange={e=>updateBlock(block.id,block.kind === "compare" ? {comparisonOperator:e.target.value as Block["comparisonOperator"]} : {operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}>{block.kind === "compare" ? <><option>==</option><option>&gt;=</option><option>&lt;=</option></> : <><option>+</option><option>-</option><option>*</option><option>/</option></>}</select><input aria-label="Right operand" value={block.right ?? (block.kind === "compare" ? "0" : "1")} onChange={e=>updateBlock(block.id,{right:e.target.value})} onClick={e=>e.stopPropagation()} /></div>}
+                  {(block.kind === "add" || block.kind === "compare") && <div className={"operator-fields "+(block.kind==="compare"?"comparison-fields":"calculate-fields")}>{renderValueSlot(block,"valueBlock",block.value,"Left value")}<select aria-label="Operator" value={block.kind === "compare" ? block.comparisonOperator ?? "==" : block.operator ?? "+"} onChange={e=>updateBlock(block.id,block.kind === "compare" ? {comparisonOperator:e.target.value as Block["comparisonOperator"]} : {operator:e.target.value as Block["operator"]})} onClick={e=>e.stopPropagation()}>{block.kind === "compare" ? <><option>==</option><option>&gt;=</option><option>&lt;=</option></> : <><option>+</option><option>-</option><option>*</option><option>/</option></>}</select>{renderValueSlot(block,"rightBlock",block.right ?? (block.kind === "compare" ? "0" : "1"),"Right value")}</div>}
                   {(block.kind === "true" || block.kind === "false") && <span className="field-hint">{block.kind === "true" ? "Always true" : "Always false"}</span>}
                 </div>
                 {(block.kind === "if" || block.kind === "repeat") && <div className="nested-flow" data-drop-into={block.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,block.id)}>
