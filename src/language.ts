@@ -1,4 +1,4 @@
-export type BlockKind = "print" | "let" | "input" | "if" | "repeat" | "add";
+export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "add";
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
@@ -9,7 +9,7 @@ export type Block = {
 export type Compilation = { code: string; errors: string[] };
 export type RunResult = { output: string; error?: string };
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const reserved = new Set(["print", "let", "input", "if", "repeat", "true", "false", "else"]);
+const reserved = new Set(["print", "let", "input", "get", "if", "repeat", "true", "false", "else"]);
 
 export function compile(blocks: Block[]): Compilation {
   const errors: string[] = [];
@@ -19,7 +19,7 @@ export function compile(blocks: Block[]): Compilation {
     for (const [index, block] of items.entries()) {
       const line = index + 1;
       switch (block.kind) {
-        case "print": lines.push(pad + "print " + (block.value || '""') + ";"); break;
+        case "print": lines.push(pad + "print " + JSON.stringify(block.value) + ";"); break;
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) errors.push("Block " + line + ": invalid variable name \"" + name + "\".");
@@ -32,6 +32,7 @@ export function compile(blocks: Block[]): Compilation {
           else lines.push(pad + "let " + name + " = input();");
           break;
         }
+        case "get": lines.push(pad + "print " + (block.value || "value") + ";"); break;
         case "if":
           lines.push(pad + "if (" + (block.value || "false") + ") {");
           emit(block.children ?? [], depth + 1); lines.push(pad + "}");
@@ -167,7 +168,7 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
     for (const block of items) {
       if (++steps > 100000) throw new Error("Execution limit reached (100,000 blocks).");
       switch (block.kind) {
-        case "print": output.push(String(evaluate(block.value || '""', variables))); break;
+        case "print": output.push(block.value); break;
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid variable name \"" + name + "\".");
@@ -178,6 +179,12 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid input variable name \"" + name + "\".");
           if (inputIndex >= inputLines.length || (inputIndex === inputLines.length - 1 && inputLines[inputIndex] === "")) throw new Error("Input exhausted. Add a line in the STDIN panel.");
           variables.set(name, inputLines[inputIndex++]!); break;
+        }
+        case "get": {
+          const name = block.value.trim();
+          if (!variables.has(name)) throw new Error(`Unknown variable "${name}".`);
+          output.push(String(variables.get(name)));
+          break;
         }
         case "add": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.right || "1") + ")", variables))); break;
         case "if": {
@@ -229,8 +236,11 @@ export function compileC(blocks: Block[]): Compilation {
     const pad = "  ".repeat(depth);
     for (const b of items) try {
       if (b.kind === "print") {
-        const e = expr(b.value || "0"), stringLike = /^["']/.test(e) || names.get(e.trim()) === "string";
-        lines.push(pad + "printf(" + (stringLike ? '"%s\\n", ' : '"%.15g\\n", ') + e + ");");
+        lines.push(pad + "printf(\"%s\\\\n\", " + JSON.stringify(b.value) + ");");
+      } else if (b.kind === "get") {
+        const name = b.value.trim();
+        if (!identifier.test(name) || !names.has(name)) errors.push("Unknown variable \"" + name + "\".");
+        else lines.push(pad + "printf(" + (names.get(name) === "string" ? '"%s\\\\n", ' : '"%.15g\\\\n", ') + name + ");");
       } else if (b.kind === "let") lines.push(pad + (b.name?.trim() ?? "value") + " = " + expr(b.value || "0") + ";");
       else if (b.kind === "input") {
         const name = b.name?.trim() ?? "value";
