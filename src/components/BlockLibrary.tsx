@@ -1,4 +1,4 @@
-import { Blocks, GripVertical, Plus, Search } from "lucide-react";
+import { Blocks, GripVertical, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DragEvent } from "react";
 import type { Block, BlockKind, ValueType } from "../language";
