@@ -1,25 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Play, Hammer, Plus, Terminal, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, Search, GripVertical, GitBranch, Check } from "lucide-react";
+import { Play, Hammer, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
+import { BlockLibrary } from "./components/BlockLibrary";
+import { TerminalPanel } from "./components/TerminalPanel";
+import { initialBlocks } from "./editor/initialBlocks";
+import { catalog } from "./editor/blockCatalog";
 
-const initialBlocks: Block[] = [
-  { id: "b1", kind: "print", value: "Hello from Blorrl!" },
-  { id: "b2", kind: "let", name: "answer", value: "42", types: ["number"] },
-  { id: "b3", kind: "print", value: "", valueBlock: { id: "b3-value", kind: "get", value: "answer" } },
-];
-const catalog: { kind: BlockKind; label: string; hint: string }[] = [
-  { kind: "print", label: "Print", hint: "Write a value to terminal" },
-  { kind: "let", label: "Variable", hint: "Store a value" },
-  { kind: "input", label: "Input", hint: "Read a line from stdin" },
-  { kind: "get", label: "Get variable", hint: "Output a variable value" },
-  { kind: "if", label: "If condition", hint: "Run a block when true" },
-  { kind: "repeat", label: "Repeat", hint: "Repeat a number of times" },
-  { kind: "add", label: "Calculate", hint: "Drag into a value socket" },
-  { kind: "true", label: "True", hint: "Boolean true value" },
-  { kind: "false", label: "False", hint: "Boolean false value" },
-  { kind: "compare", label: "==", hint: "Compare values; drag into a value socket" },
-];
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
 type SnapGhost = { x: number; y: number; count: number; targetId: string };
@@ -52,7 +39,6 @@ export default function App() {
   const marqueeStart = useRef<{x:number;y:number}|null>(null);
   const compiled = useMemo(() => compile(blocks), [blocks]);
   const assemblyCompiled = useMemo(() => compileAssembly(blocks), [blocks]);
-  const visibleCatalog = catalog.filter(item => (item.label + " " + item.hint).toLowerCase().includes(query.toLowerCase()));
   const allBlocks = (items: Block[]): Block[] => items.flatMap(b => [b, ...(b.conditionBlock ? allBlocks([b.conditionBlock]) : []), ...(b.valueBlock ? allBlocks([b.valueBlock]) : []), ...(b.rightBlock ? allBlocks([b.rightBlock]) : []), ...allBlocks(b.children ?? []), ...(b.elseIf ?? []).flatMap(br => allBlocks(br.children)), ...allBlocks(b.elseChildren ?? [])]);
   const totalBlocks = allBlocks(blocks).length;
 
@@ -504,12 +490,7 @@ export default function App() {
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
         <div className="file-row"><span className="file-glyph">B</span><span>main.blorr</span><span className="file-unsaved"/></div>
-        <div className="library-head"><span>BLOCKS</span><span>{visibleCatalog.length.toString().padStart(2,"0")}</span></div>
-        <div className="library-search"><Search size={13}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter blocks"/></div>
-        <div className="catalog-list">
-          {visibleCatalog.map(item => <button key={item.kind} className="catalog-item" draggable onDragStart={e => onDragStart(e,{source:"library",kind:item.kind})} onClick={() => addBlock(item.kind)} title="Click to add or drag into the workspace"><span className={"catalog-icon " + item.kind}><Plus size={14}/></span><span className="catalog-copy"><strong>{item.label}</strong><small>{item.hint}</small></span><GripVertical size={14} className="catalog-grip"/></button>)}
-        </div>
-        <div className="sidebar-bottom"><div className="sidebar-section-label">OUTLINE</div><div className="outline-row"><GitBranch size={13}/><span>main</span><span className="outline-count">{blocks.length}</span></div><div className="sidebar-note">Space + drag pans. Drag statements to move connected stacks; drop value blocks into value sockets. Delete/Backspace removes selection.</div></div>
+        <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onAddBlock={addBlock} />
       </aside>
       <section className="editor">
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span><button className="icon-button tab-export" title="Export source" onClick={exportSource}><Download size={15}/></button></div>
@@ -569,11 +550,7 @@ export default function App() {
       </section>
     </section>
     <div className="pane-resizer" role="separator" aria-label="Resize workspace and terminal" onPointerDown={e=>{resizeOrigin.current={y:e.clientY,ratio:workspaceRatio};document.body.classList.add("resizing-pane");}}><span/><span/><span/></div>
-    <section className="terminal">
-      <div className="terminal-top"><div className="terminal-title"><Terminal size={15}/><strong>TERMINAL</strong><span className="terminal-divider">/</span><span>OUTPUT</span></div><div className="terminal-status"><span className={"status-dot " + status}/>{status==="ran"?"EXECUTED":status==="built"?"BUILD SUCCESS":status==="error"?"ERROR":"IDLE"}<button className="clear-button" onClick={()=>{setOutput("");setStatus("idle");}}>Clear</button></div></div>
-      <div className="terminal-body"><div className="terminal-input"><label htmlFor="stdin">STDIN</label><textarea id="stdin" value={stdin} onChange={e=>setStdin(e.target.value)} placeholder="Type input here… (one line per read)" rows={2}/><span>INPUT BUFFER</span></div><div className="terminal-output"><div className="output-label"><span>STDOUT / STDERR</span><span>UTF-8</span></div><pre className={status==="error"?"error-text":""}>{output}</pre></div></div>
-      <div className="terminal-bottom"><span>BLORRL RUNTIME <b>·</b> NATIVE BUILD VIA ZIG</span><span>COMPILE <b>·</b> {compiled.errors.length || assemblyCompiled.errors.length ? "ERRORS" : "ASSEMBLY"}</span></div>
-    </section>
+    <TerminalPanel stdin={stdin} onStdinChange={setStdin} output={output} status={status} onClear={()=>{setOutput("");setStatus("idle");}} hasCompileErrors={!!(compiled.errors.length || assemblyCompiled.errors.length)} blockCount={blocks.length} />
     <footer className="statusbar"><span><span className="status-light"/> {serverOnline === false ? "Server connection unavailable" : "Ready"} <span className="statusbar-path">/ main.blorr</span></span><span>UTF-8 <b>·</b> TYPESCRIPT <b>·</b> <ChevronDown size={12}/></span></footer>
   </main>;
 }
