@@ -177,13 +177,13 @@ export default function App() {
       const drag = blockPointerDrag.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       blockPointerDrag.current = null;
+      const canvas = canvasRef.current;
       drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.willChange = ""; } });
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
       const ghost = snapGhostRef.current;
-      const canvas = canvasRef.current;
       const next: Record<string, {x:number;y:number}> = {...positionsRef.current};
 
       if (ghost?.targetId.startsWith("__value__:")) {
@@ -223,7 +223,9 @@ export default function App() {
           const origin = drag.origins[id];
           if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
         });
-        setBlocks(current => current.map(block => drag.ids.includes(block.id) ? ({ ...block, attachedTo: undefined }) : block));
+        // Detach only the dragged stack root; its descendants remain connected to each other.
+        const rootId = drag.ids[0];
+        setBlocks(current => current.map(block => block.id === rootId ? ({ ...block, attachedTo: undefined }) : block));
       }
 
       setPositions(next);
@@ -585,7 +587,7 @@ export default function App() {
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "") + (dragPreview && snapGhost && dragPreview.ids.includes(block.id) ? " ghost-source-hidden" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
@@ -596,17 +598,20 @@ export default function App() {
             // A block later in the program list is not automatically part of this stack.
             const connectedStack = (startIndex: number) => {
               const stackIds = [blocks[startIndex]!.id];
-              let previous = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${blocks[startIndex]!.id}"]`);
-              for (let index = startIndex + 1; index < blocks.length; index++) {
-                const nextBlock = blocks[index]!;
-                if (["add","compare","true","false","get"].includes(nextBlock.kind)) break;
-                const nextElement = canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${nextBlock.id}"]`);
-                if (!previous || !nextElement) break;
-                const previousRect = previous.getBoundingClientRect();
-                const nextRect = nextElement.getBoundingClientRect();
-                if (Math.abs(nextRect.left - previousRect.left) > 12 || Math.abs(nextRect.top - (previousRect.bottom - 1)) > 12) break;
-                stackIds.push(nextBlock.id);
-                previous = nextElement;
+              const seen = new Set(stackIds);
+              let parentId = blocks[startIndex]!.id;
+              // The attachment graph is authoritative; screen coordinates and list adjacency
+              // must not decide which blocks are carried by a drag.
+              while (true) {
+                const child = blocks.find(item =>
+                  item.attachedTo === parentId &&
+                  !seen.has(item.id) &&
+                  !["add","compare","true","false","get"].includes(item.kind)
+                );
+                if (!child) break;
+                stackIds.push(child.id);
+                seen.add(child.id);
+                parentId = child.id;
               }
               return stackIds;
             };
