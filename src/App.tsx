@@ -319,9 +319,11 @@ export default function App() {
       // Read the rendered preview's used width before removing its palette-only
       // scaling class. Do not cap it to the canvas width: that makes the ghost
       // narrower than the block that will actually be inserted.
-      const sourceWidth = getComputedStyle(source).width;
+      const previewStyle = getComputedStyle(source);
+      const previewScale = Number.parseFloat(previewStyle.getPropertyValue("--palette-preview-scale")) || 1;
+      const sourceWidth = `${source.getBoundingClientRect().width / previewScale}px`;
       Object.assign(ghost.style, {
-        position: "relative", left: "auto", top: "auto", transform: "none",
+        position: "relative", left: "auto", top: "auto", transform: "none", zoom: "1",
         width: sourceWidth, maxWidth: "", minWidth: "0",
         minHeight: "0", margin: "0", boxSizing: "border-box", pointerEvents: "none"
       });
