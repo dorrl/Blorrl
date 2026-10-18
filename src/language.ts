@@ -281,6 +281,214 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
   catch (error) { return { output: output.join("\n"), error: error instanceof Error ? error.message : String(error) }; }
 }
 
+export function compileAssembly(blocks: Block[]): Compilation {
+  const errors: string[] = [];
+  const names = new Map<string, ValueType>();
+  const strings: string[] = [];
+  const data: string[] = [];
+  const code: string[] = [];
+  let labelIndex = 0;
+  const label = (prefix: string) => ".L" + prefix + "_" + labelIndex++;
+  const str = (value: string) => {
+    const id = label("str");
+    const bytes = Array.from(new TextEncoder().encode(value)).concat(0);
+    data.push(id + ": .byte " + bytes.join(", "));
+    return id;
+  };
+  const fmtInt = str("%lld\n");
+  const fmtString = str("%s\n");
+  const fmtScanInt = str("%lld");
+  const fmtScanString = str("%4095s");
+  const variableLabel = (name: string) => ".Lvar_" + name;
+  const bufferLabel = (name: string) => ".Lbuf_" + name;
+  function scan(items: Block[]) {
+    for (const b of items) {
+      if (b.kind === "let" || b.kind === "input") {
+        const name = b.name?.trim() ?? "";
+        if (!identifier.test(name) || reserved.has(name)) errors.push("Invalid variable name \"" + name + "\".");
+        else names.set(name, selectedLiteralType(b));
+      }
+      if (b.conditionBlock) scan([b.conditionBlock]);
+      if (b.valueBlock) scan([b.valueBlock]);
+      if (b.rightBlock) scan([b.rightBlock]);
+      scan(b.children ?? []);
+      for (const branch of b.elseIf ?? []) scan(branch.children);
+      if (b.elseChildren) scan(b.elseChildren);
+    }
+  }
+  scan(blocks);
+  for (const [name, type] of names) {
+    data.push(variableLabel(name) + ": .quad 0");
+    if (type === "string") data.push(bufferLabel(name) + ": .zero 4096");
+  }
+  const inferRawType = (raw: string): ValueType => {
+    const value = raw.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return "string";
+    if (value === "true" || value === "false") return "boolean";
+    if (identifier.test(value)) return names.get(value) ?? "number";
+    return "number";
+  };
+  function emitRaw(raw: string) {
+    const value = raw.trim();
+    if (!value) { code.push("  xor eax, eax"); return; }
+    let tokens: Token[];
+    try { tokens = tokenize(value).filter(token => token.kind !== "eof"); }
+    catch (error) { errors.push(error instanceof Error ? error.message : String(error)); code.push("  xor eax, eax"); return; }
+    if (tokens.length === 1) {
+      const token = tokens[0]!;
+      if (token.kind === "number") {
+        const number = Number(token.value);
+        if (!Number.isSafeInteger(number)) errors.push("Assembly backend currently requires whole-number literals: " + value);
+        code.push("  mov rax, " + (Number.isSafeInteger(number) ? String(number) : "0"));
+      } else if (token.kind === "string") {
+        code.push("  lea rax, [rip+" + str(token.value) + "]");
+      } else if (token.kind === "identifier") {
+        if (token.value === "true") code.push("  mov rax, 1");
+        else if (token.value === "false") code.push("  xor eax, eax");
+        else if (names.has(token.value)) code.push("  mov rax, QWORD PTR [rip+" + variableLabel(token.value) + "]");
+        else { errors.push("Unknown variable \"" + token.value + "\"."); code.push("  xor eax, eax"); }
+      }
+      return;
+    }
+    errors.push("Use a Calculate block for arithmetic instead of typing an expression: " + value);
+    code.push("  xor eax, eax");
+  }
+  function emitValue(block: Block): ValueType {
+    if (block.kind === "true") { code.push("  mov rax, 1"); return "boolean"; }
+    if (block.kind === "false") { code.push("  xor eax, eax"); return "boolean"; }
+    if (block.kind === "get") {
+      const name = block.value.trim();
+      if (!names.has(name)) { errors.push("Unknown variable \"" + name + "\"."); code.push("  xor eax, eax"); return "number"; }
+      code.push("  mov rax, QWORD PTR [rip+" + variableLabel(name) + "]");
+      return names.get(name)!;
+    }
+    if (block.kind === "add") {
+      const leftType = block.valueBlock ? emitValue(block.valueBlock) : inferRawType(block.value);
+      if (!block.valueBlock) emitRaw(block.value || "0");
+      code.push("  push rax");
+      const rightType = block.rightBlock ? emitValue(block.rightBlock) : inferRawType(block.right ?? "1");
+      if (!block.rightBlock) emitRaw(block.right || "1");
+      code.push("  mov rcx, rax", "  pop rax");
+      switch (block.operator ?? "+") {
+        case "+": code.push("  add rax, rcx"); break;
+        case "-": code.push("  sub rax, rcx"); break;
+        case "*": code.push("  imul rax, rcx"); break;
+        case "/": code.push("  cqo", "  idiv rcx"); break;
+      }
+      if (leftType === "string" || rightType === "string") errors.push("Calculate only supports numeric values.");
+      return "number";
+    }
+    if (block.kind === "compare") {
+      const leftType = block.valueBlock ? emitValue(block.valueBlock) : inferRawType(block.value);
+      if (!block.valueBlock) emitRaw(block.value || "0");
+      code.push("  push rax");
+      const rightType = block.rightBlock ? emitValue(block.rightBlock) : inferRawType(block.right ?? "0");
+      if (!block.rightBlock) emitRaw(block.right || "0");
+      if (leftType === "string" || rightType === "string") {
+        code.push("  mov rdx, rax", "  pop rcx", "  sub rsp, 32", "  call strcmp", "  add rsp, 32", "  cmp eax, 0");
+      } else {
+        code.push("  mov rcx, rax", "  pop rax", "  cmp rax, rcx");
+      }
+      code.push(block.comparisonOperator === ">=" ? "  setge al" : block.comparisonOperator === "<=" ? "  setle al" : "  sete al", "  movzx rax, al");
+      return "boolean";
+    }
+    errors.push("Block " + block.kind + " cannot be inserted into a value.");
+    code.push("  xor eax, eax");
+    return "number";
+  }
+  function emitPrint(block: Block) {
+    let type: ValueType;
+    if (block.valueBlock) type = emitValue(block.valueBlock);
+    else {
+      code.push("  lea rdx, [rip+" + str(block.value) + "]");
+      code.push("  lea rcx, [rip+" + fmtString + "]", "  sub rsp, 32", "  call printf", "  add rsp, 32");
+      return;
+    }
+    code.push("  mov rdx, rax", "  lea rcx, [rip+" + (type === "string" ? fmtString : fmtInt) + "]", "  sub rsp, 32", "  call printf", "  add rsp, 32");
+  }
+  function emit(items: Block[]) {
+    for (const block of items) {
+      try {
+        switch (block.kind) {
+          case "print": emitPrint(block); break;
+          case "let": {
+            const name = block.name?.trim() ?? "";
+            if (!names.has(name)) break;
+            if (block.valueBlock) {
+              const valueType = emitValue(block.valueBlock);
+              if (names.get(name) === "string" && valueType !== "string") errors.push("Variable \"" + name + "\" expects a string value.");
+            } else if (names.get(name) === "string") code.push("  lea rax, [rip+" + str(block.value) + "]");
+            else if (names.get(name) === "boolean") code.push("  mov rax, " + (block.value.trim() === "true" ? "1" : "0"));
+            else {
+              const number = Number(block.value);
+              if (!Number.isSafeInteger(number)) errors.push("Variable \"" + name + "\" needs a whole-number literal for assembly output.");
+              code.push("  mov rax, " + (Number.isSafeInteger(number) ? String(number) : "0"));
+            }
+            code.push("  mov QWORD PTR [rip+" + variableLabel(name) + "], rax");
+            break;
+          }
+          case "input": {
+            const name = block.name?.trim() ?? "";
+            if (!names.has(name)) break;
+            if (names.get(name) === "string") {
+              code.push("  lea rcx, [rip+" + fmtScanString + "]", "  lea rdx, [rip+" + bufferLabel(name) + "]", "  sub rsp, 32", "  call scanf", "  add rsp, 32", "  lea rax, [rip+" + bufferLabel(name) + "]", "  mov QWORD PTR [rip+" + variableLabel(name) + "], rax");
+            } else {
+              code.push("  lea rcx, [rip+" + fmtScanInt + "]", "  lea rdx, [rip+" + variableLabel(name) + "]", "  sub rsp, 32", "  call scanf", "  add rsp, 32");
+            }
+            break;
+          }
+          case "get": case "add": case "compare": case "true": case "false": break;
+          case "if": {
+            const elseLabel = label("else"), endLabel = label("endif");
+            if (block.conditionBlock) emitValue(block.conditionBlock); else code.push("  xor eax, eax");
+            code.push("  test rax, rax", "  jz " + elseLabel);
+            emit(block.children ?? []);
+            code.push("  jmp " + endLabel, elseLabel + ":");
+            for (const branch of block.elseIf ?? []) {
+              const next = label("elseif_next");
+              emitRaw(branch.condition || "false");
+              code.push("  test rax, rax", "  jz " + next);
+              emit(branch.children);
+              code.push("  jmp " + endLabel, next + ":");
+            }
+            if (block.elseChildren) emit(block.elseChildren);
+            code.push(endLabel + ":");
+            break;
+          }
+          case "repeat": {
+            const start = label("loop"), end = label("endloop"), counter = label("counter");
+            data.push(counter + ": .quad 0");
+            emitRaw(block.value || "1");
+            code.push("  mov QWORD PTR [rip+" + counter + "], rax", start + ":", "  cmp QWORD PTR [rip+" + counter + "], 0", "  jle " + end, "  cmp QWORD PTR [rip+" + counter + "], 10000", "  jg " + end);
+            emit(block.children ?? []);
+            code.push("  sub QWORD PTR [rip+" + counter + "], 1", "  jmp " + start, end + ":");
+            break;
+          }
+        }
+      } catch (error) { errors.push(error instanceof Error ? error.message : String(error)); }
+    }
+  }
+  emit(blocks);
+  const assembly = [
+    ".intel_syntax noprefix",
+    ".text",
+    ".globl main",
+    ".def main; .scl 2; .type 32; .endef",
+    "main:",
+    "  push rbp",
+    "  mov rbp, rsp",
+    "  sub rsp, 32",
+    ...code,
+    "  xor eax, eax",
+    "  add rsp, 32",
+    "  pop rbp",
+    "  ret",
+    ".data",
+    ...data,
+  ];
+  return { code: assembly.join("\n") + "\n", errors };
+}
+
 export function compileC(blocks: Block[]): Compilation {
   const errors: string[] = [];
   const names = new Map<string, ValueType>();
