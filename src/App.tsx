@@ -227,6 +227,11 @@ export default function App() {
           rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
           return rest;
         });
+        // Materialize fallback layout positions before shifting, otherwise blocks
+        // without an explicit entry in positions keep their old index-based location.
+        blocks.forEach((block, index) => {
+          if (!next[block.id]) next[block.id] = positionsRef.current[block.id] ?? {x:42,y:90 + index * 86};
+        });
         const insertedHeight = drag.ids.reduce((total, id) =>
           total + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
         const targetElement = ghost.targetId === "__start"
@@ -364,8 +369,10 @@ export default function App() {
       if (beforeId && targetPosition) {
         const targetHeight = targetElement?.offsetHeight ?? 88;
         const shiftFrom = targetPosition.y + targetHeight - 10;
-        Object.entries(current).forEach(([id,point]) => {
-          if (id !== block.id && id !== beforeId && point.y >= shiftFrom) next[id] = {x:point.x,y:point.y+blockHeight-1};
+        blocks.forEach((item,index) => {
+          if (item.id === beforeId) return;
+          const point = current[item.id] ?? {x:42,y:90 + index * 86};
+          next[item.id] = point.y >= shiftFrom ? {x:point.x,y:point.y+blockHeight-1} : point;
         });
       }
       return next;
