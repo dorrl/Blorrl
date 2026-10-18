@@ -401,6 +401,9 @@ export default function App() {
         }
         return;
       }
+      const reporterKinds = ["add","compare","true","false","get"];
+      const movingKinds = payload.source === "library" ? [payload.kind] : allBlocks(blocks).filter(b=>payload.ids.includes(b.id)).map(b=>b.kind);
+      if (movingKinds.some(kind=>reporterKinds.includes(kind))) return;
       const target=targetId ? allBlocks(blocks).find(b=>b.id===targetId) : undefined;
       const branchTarget=!!targetId && allBlocks(blocks).some(b=>b.elseId===targetId||(b.elseIf??[]).some(br=>br.id===targetId));
       if (targetId && ((target && (target.kind==="if" || target.kind==="repeat")) || branchTarget)) {
