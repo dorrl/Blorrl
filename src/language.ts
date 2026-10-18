@@ -2,7 +2,7 @@ export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "a
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
-  id: string; kind: BlockKind; value: string; name?: string; right?: string;
+  id: string; kind: BlockKind; value: string; name?: string; right?: string; valueBlock?: Block; rightBlock?: Block;
   operator?: "+" | "-" | "*" | "/"; comparisonOperator?: "==" | ">=" | "<="; types?: ValueType[]; children?: Block[]; conditionBlock?: Block;
   elseIf?: Branch[]; elseChildren?: Block[]; elseId?: string;
 };
@@ -40,11 +40,41 @@ function literalForC(block: Block): string {
   if (block.value.trim() === "" || !Number.isFinite(value)) throw new Error(`Variable "${block.name ?? "value"}" needs a numeric literal.`);
   return String(value);
 }
-function conditionExpression(block: Block): string {
+function blockExpression(block: Block): string {
   if (block.kind === "true") return "true";
   if (block.kind === "false") return "false";
-  if (block.kind === "compare") return "(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")";
+  if (block.kind === "get") return block.value || "value";
+  if (block.kind === "add") return "(" + (block.valueBlock ? blockExpression(block.valueBlock) : block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.rightBlock ? blockExpression(block.rightBlock) : block.right || "1") + ")";
+  if (block.kind === "compare") return "(" + (block.valueBlock ? blockExpression(block.valueBlock) : block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.rightBlock ? blockExpression(block.rightBlock) : block.right || "0") + ")";
+  throw new Error("This block cannot be used as a value.");
+}
+function conditionExpression(block: Block): string {
+  if (block.kind === "true" || block.kind === "false" || block.kind === "compare") return blockExpression(block);
   throw new Error("An if condition needs a true/false or comparison block.");
+}
+function evaluateBlockValue(block: Block, variables: Map<string, Value>): Value {
+  if (block.kind === "true") return true;
+  if (block.kind === "false") return false;
+  if (block.kind === "get") {
+    const name = block.value.trim();
+    if (!variables.has(name)) throw new Error(`Unknown variable "${name}".`);
+    return variables.get(name)!;
+  }
+  if (block.kind === "add") {
+    const left = block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : evaluate(block.value || "0", variables);
+    const right = block.rightBlock ? evaluateBlockValue(block.rightBlock, variables) : evaluate(block.right || "1", variables);
+    return numeric(left, right, block.operator ?? "+");
+  }
+  if (block.kind === "compare") {
+    const left = block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : evaluate(block.value || "0", variables);
+    const right = block.rightBlock ? evaluateBlockValue(block.rightBlock, variables) : evaluate(block.right || "0", variables);
+    switch (block.comparisonOperator ?? "==") {
+      case "==": return left === right;
+      case ">=": return comparable(left, right, ">=", true, true);
+      case "<=": return comparable(left, right, "<=", true);
+    }
+  }
+  throw new Error("This block cannot be used as a value.");
 }
 
 export function compile(blocks: Block[]): Compilation {
@@ -55,11 +85,11 @@ export function compile(blocks: Block[]): Compilation {
     for (const [index, block] of items.entries()) {
       const line = index + 1;
       switch (block.kind) {
-        case "print": lines.push(pad + "print " + JSON.stringify(block.value) + ";"); break;
+        case "print": lines.push(pad + "print " + (block.valueBlock ? blockExpression(block.valueBlock) : JSON.stringify(block.value)) + ";"); break;
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) errors.push("Block " + line + ": invalid variable name \"" + name + "\".");
-          else lines.push(pad + "let " + name + " = " + literalForLanguage(block) + ";");
+          else lines.push(pad + "let " + name + " = " + (block.valueBlock ? blockExpression(block.valueBlock) : literalForLanguage(block)) + ";");
           break;
         }
         case "input": {
@@ -71,7 +101,7 @@ export function compile(blocks: Block[]): Compilation {
         case "get": lines.push(pad + "print " + (block.value || "value") + ";"); break;
         case "true": lines.push(pad + "print true;"); break;
         case "false": lines.push(pad + "print false;"); break;
-        case "compare": lines.push(pad + "print (" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ");"); break;
+        case "compare": lines.push(pad + "print " + blockExpression(block) + ";"); break;
         case "if":
           lines.push(pad + "if (" + (block.conditionBlock ? conditionExpression(block.conditionBlock) : "false") + ") {");
           emit(block.children ?? [], depth + 1); lines.push(pad + "}");
@@ -84,7 +114,7 @@ export function compile(blocks: Block[]): Compilation {
         case "repeat":
           lines.push(pad + "repeat (" + (block.value || "1") + ") {");
           emit(block.children ?? [], depth + 1); lines.push(pad + "}"); break;
-        case "add": lines.push(pad + "print (" + (block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.right || "1") + ");"); break;
+        case "add": lines.push(pad + "print " + blockExpression(block) + ";"); break;
       }
     }
   }
@@ -207,11 +237,11 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
     for (const block of items) {
       if (++steps > 100000) throw new Error("Execution limit reached (100,000 blocks).");
       switch (block.kind) {
-        case "print": output.push(block.value); break;
+        case "print": output.push(String(block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : block.value)); break;
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid variable name \"" + name + "\".");
-          variables.set(name, literalForRuntime(block)); break;
+          variables.set(name, block.valueBlock ? evaluateBlockValue(block.valueBlock, variables) : literalForRuntime(block)); break;
         }
         case "input": {
           const name = block.name?.trim() ?? "";
@@ -225,12 +255,12 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
           output.push(String(variables.get(name)));
           break;
         }
-        case "add": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.right || "1") + ")", variables))); break;
+        case "add": output.push(String(evaluateBlockValue(block, variables))); break;
         case "true": output.push("true"); break;
         case "false": output.push("false"); break;
-        case "compare": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")", variables))); break;
+        case "compare": output.push(String(evaluateBlockValue(block, variables))); break;
         case "if": {
-          if (Boolean(block.conditionBlock ? evaluate(conditionExpression(block.conditionBlock), variables) : false)) execute(block.children ?? []);
+          if (Boolean(block.conditionBlock ? evaluateBlockValue(block.conditionBlock, variables) : false)) execute(block.children ?? []);
           else {
             let handled = false;
             for (const branch of block.elseIf ?? []) if (Boolean(evaluate(branch.condition || "false", variables))) { execute(branch.children); handled = true; break; }
