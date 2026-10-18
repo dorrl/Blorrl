@@ -21,17 +21,21 @@ serverRouter.post("/api/build/:target", async (req, res) => {
   const target = req.params.target;
   if (target !== "assembly" && target !== "exe") { res.status(400).send("Unknown build target. Use assembly or exe."); return; }
   const source = req.body?.source;
-  if (typeof source !== "string" || source.length > 200_000 || !source.includes("int main")) {
-    res.status(400).send("Invalid or oversized C source."); return;
+  if (typeof source !== "string" || source.length > 200_000 || !source.includes(".globl main") || !source.includes("main:")) {
+    res.status(400).send("Invalid or oversized x64 assembly source."); return;
   }
   const directory = await mkdtemp(join(tmpdir(), "blorrl-build-"));
-  const input = join(directory, "main.c");
+  const input = join(directory, "main.s");
   const output = join(directory, target === "exe" ? "main.exe" : "main.s");
   try {
     await writeFile(input, source, "utf8");
-    const args = target === "exe"
-      ? ["cc", "-target", "x86_64-windows-gnu", "-O2", input, "-o", output]
-      : ["cc", "-target", "x86_64-windows-gnu", "-S", "-masm=intel", "-O2", input, "-o", output];
+    if (target === "assembly") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename="main.s"");
+      res.send(source);
+      return;
+    }
+    const args = ["cc", "-target", "x86_64-windows-gnu", "-O2", input, "-o", output];
     const compiler = process.env.BLORRL_ZIG ?? "zig";
     const result = await new Promise<{ code: number | null; stderr: string }>((resolveResult, reject) => {
       const child = spawn(compiler, args, { cwd: directory, windowsHide: true, shell: false });
