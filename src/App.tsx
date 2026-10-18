@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { Play, Hammer, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check } from "lucide-react";
+import { Play, Hammer, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check, Save, FolderOpen } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
 import { TerminalPanel } from "./components/TerminalPanel";
@@ -489,11 +489,43 @@ export default function App() {
     a.href = url; a.download = "main.s"; a.click(); URL.revokeObjectURL(url);
   }
 
+  function saveProject() {
+    const project = { format: "blorrl", version: 1, workspace: { blocks, positions, workspaceRatio, sidebarWidth } };
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "blorrl-project.blorrl"; a.click();
+    URL.revokeObjectURL(url);
+    setOutput("Blorrl project saved."); setStatus("built");
+  }
+
+  async function loadProject(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file) return;
+    try {
+      const project = JSON.parse(await file.text());
+      if (project?.format !== "blorrl" || project.version !== 1 || !project.workspace || !Array.isArray(project.workspace.blocks)) throw new Error("Unsupported or invalid Blorrl project format.");
+      if (!project.workspace.blocks.every((b: unknown) => !!b && typeof b === "object" && typeof (b as Block).id === "string" && typeof (b as Block).kind === "string")) throw new Error("Project contains an invalid block.");
+      const loadedPositions: Record<string, {x:number;y:number}> = {};
+      if (project.workspace.positions && typeof project.workspace.positions === "object") {
+        for (const [id, p] of Object.entries(project.workspace.positions as Record<string, {x:number;y:number}>)) {
+          if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) loadedPositions[id] = {x:p.x,y:p.y};
+        }
+      }
+      setBlocks(project.workspace.blocks as Block[]); setPositions(loadedPositions);
+      setSelected(project.workspace.blocks[0] ? [project.workspace.blocks[0].id] : []);
+      if (Number.isFinite(project.workspace.workspaceRatio)) setWorkspaceRatio(Math.max(30, Math.min(85, project.workspace.workspaceRatio)));
+      if (Number.isFinite(project.workspace.sidebarWidth)) setSidebarWidth(Math.max(150, Math.min(420, project.workspace.sidebarWidth)));
+      setTypePanelFor(null); setSnapGhost(null); snapGhostRef.current = null;
+      setOutput("Loaded " + file.name); setStatus("idle");
+    } catch (error) { setOutput(error instanceof Error ? error.message : "Could not open project file."); setStatus("error"); }
+  }
+
   return <main className="studio">
     <header className="topbar">
+      <input type="file" accept=".blorrl,application/json" hidden onChange={loadProject}/>
       <a className="brand" href="#"><span className="brand-mark"><Blocks size={18}/></span><span>blorrl<span className="brand-dot">.</span></span><span className="studio-tag">STUDIO</span></a>
       <div className="top-meta"><span className="live-dot"/><span>WORKSPACE</span><span className="version">develop / main.blorr</span></div>
-      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Source</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("assembly")}><Download size={13}/> .s</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
+      <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={() => document.querySelector<HTMLInputElement>('.topbar input[type="file"]')?.click()}><FolderOpen size={13}/> Open</button><button className="build-button" onClick={saveProject}><Save size={13}/> Save .blorrl</button><button className="build-button" onClick={build}><Hammer size={14}/> Source</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("assembly")}><Download size={13}/> .s</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
     <section className="workspace" style={{height: `calc(${workspaceRatio}vh - ${76 * workspaceRatio / 100}px)`}}>
       <aside className="sidebar" style={{width:sidebarWidth,flexBasis:sidebarWidth}}>
