@@ -24,6 +24,7 @@ export default function App() {
   const [marquee, setMarquee] = useState<{x:number;y:number;w:number;h:number}|null>(null);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
+  const [sidebarWidth, setSidebarWidth] = useState(220);
   const [spaceDown, setSpaceDown] = useState(false);
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
   const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
@@ -33,6 +34,7 @@ export default function App() {
   const snapGhostRef = useRef<SnapGhost | null>(null);
   snapGhostRef.current = snapGhost;
   const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
+  const sidebarResizeOrigin = useRef<{x:number;width:number}|null>(null);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -59,10 +61,19 @@ export default function App() {
   useEffect(() => {
     const handleResizeMove = (event: PointerEvent) => {
       const origin = resizeOrigin.current;
-      if (!origin) return;
-      setWorkspaceRatio(Math.max(30, Math.min(85, origin.ratio + (event.clientY - origin.y) / Math.max(1, window.innerHeight) * 100)));
+      if (origin) {
+        setWorkspaceRatio(Math.max(30, Math.min(85, origin.ratio + (event.clientY - origin.y) / Math.max(1, window.innerHeight) * 100)));
+      }
+      const sidebarOrigin = sidebarResizeOrigin.current;
+      if (sidebarOrigin) {
+        setSidebarWidth(Math.max(150, Math.min(Math.min(420, window.innerWidth * 0.42), sidebarOrigin.width + event.clientX - sidebarOrigin.x)));
+      }
     };
-    const handleResizeEnd = () => { resizeOrigin.current = null; document.body.classList.remove("resizing-pane"); };
+    const handleResizeEnd = () => {
+      resizeOrigin.current = null;
+      sidebarResizeOrigin.current = null;
+      document.body.classList.remove("resizing-pane", "resizing-sidebar");
+    };
     window.addEventListener("pointermove", handleResizeMove);
     window.addEventListener("pointerup", handleResizeEnd);
     window.addEventListener("pointercancel", handleResizeEnd);
@@ -72,7 +83,6 @@ export default function App() {
       window.removeEventListener("pointercancel", handleResizeEnd);
     };
   }, []);
-
 
 
   useEffect(() => {
@@ -97,6 +107,14 @@ export default function App() {
       });
       setPositions(next);
 
+      const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
+      const movingOrigin = drag.origins[drag.ids[0] ?? ""];
+      const canvasRect = canvas.getBoundingClientRect();
+      // Snap when the dragged stack's top edge reaches the target's bottom edge,
+      // independent of where inside the dragged block the pointer was grabbed.
+      const movingTop = canvasRect.top + (movingOrigin?.y ?? movingElement?.offsetTop ?? 0) + dy - canvas.scrollTop;
+      const movingLeft = canvasRect.left + (movingOrigin?.x ?? movingElement?.offsetLeft ?? 0) + dx - canvas.scrollLeft;
+      const movingRight = movingLeft + (movingElement?.offsetWidth ?? 0);
       const candidate = Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
         .filter(element => !drag.ids.includes(element.dataset.blockId ?? "") && !["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>element.classList.contains(kind)))
         .map(element => {
@@ -106,8 +124,8 @@ export default function App() {
             id,
             x: element.offsetLeft,
             y: element.offsetTop + element.offsetHeight - 1,
-            distance: Math.abs(event.clientY - rect.bottom),
-            horizontal: event.clientX >= rect.left - 14 && event.clientX <= rect.right + 14
+            distance: Math.abs(movingTop - rect.bottom),
+            horizontal: movingRight >= rect.left - 14 && movingLeft <= rect.right + 14
           } : null;
         })
         .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 18 && item.horizontal)
@@ -119,13 +137,12 @@ export default function App() {
         id: "__start",
         x: startNode.offsetLeft,
         y: startNode.offsetTop + startNode.offsetHeight - 1,
-        distance: Math.abs(event.clientY - startRect.bottom),
-        horizontal: event.clientX >= startRect.left - 14 && event.clientX <= startRect.right + 14
+        distance: Math.abs(movingTop - startRect.bottom),
+        horizontal: movingRight >= startRect.left - 14 && movingLeft <= startRect.right + 14
       } : null;
-      const canvasRect = canvas.getBoundingClientRect();
-      const movingElement = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
-      const canBeCondition = !!movingElement && ["kind-true","kind-false","kind-compare"].some(kind => movingElement.classList.contains(kind));
-      const canBeValue = !!movingElement && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>movingElement.classList.contains(kind));
+      const movingElementForSocket = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
+      const canBeCondition = !!movingElementForSocket && ["kind-true","kind-false","kind-compare"].some(kind => movingElementForSocket.classList.contains(kind));
+      const canBeValue = !!movingElementForSocket && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>movingElementForSocket.classList.contains(kind));
       const valueCandidate = canBeValue ? Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
         .map(slot=>{const rect=slot.getBoundingClientRect();const inside=event.clientX>=rect.left-4&&event.clientX<=rect.right+4&&event.clientY>=rect.top-4&&event.clientY<=rect.bottom+4;return inside?{id:"__value__:"+slot.dataset.valueFor+":"+slot.dataset.valueField,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop,distance:0,horizontal:true,area:rect.width*rect.height}:null;}).filter((item):item is {id:string;x:number;y:number;distance:number;horizontal:boolean;area:number}=>item!==null).sort((a,b)=>a.area-b.area)[0]??null:null;
       const conditionCandidate = canBeCondition ? Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
@@ -486,12 +503,13 @@ export default function App() {
       <div className="top-actions"><span className={"server-indicator " + (serverOnline === true ? "online" : serverOnline === false ? "offline" : "")}><span/>{serverOnline === true ? "SERVER CONNECTED" : serverOnline === false ? "SERVER OFFLINE" : "CONNECTING"}</span><button className="icon-button" title="Language guide" onClick={() => setShowHelp(v => !v)}><CircleHelp size={16}/></button><button className="subtle-button" onClick={() => {setBlocks(initialBlocks);setSelected(["b1"]);setStatus("idle");}}><RotateCcw size={13}/> Reset</button><button className="build-button" onClick={build}><Hammer size={14}/> Source</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("assembly")}><Download size={13}/> .s</button><button className="build-button" disabled={busy} onClick={() => downloadBuild("exe")}><Download size={13}/> .exe</button><button className="run-button" disabled={busy} onClick={run}><Play size={14} fill="currentColor"/> Run</button></div>
     </header>
     <section className="workspace" style={{height: `calc(${workspaceRatio}vh - ${76 * workspaceRatio / 100}px)`}}>
-      <aside className="sidebar">
+      <aside className="sidebar" style={{width:sidebarWidth,flexBasis:sidebarWidth}}>
         <div className="side-title"><span>EXPLORER</span><span className="side-menu">···</span></div>
         <div className="project-row"><ChevronDown size={13}/><span className="folder-glyph">▣</span><strong>BLORRL PROJECT</strong></div>
         <div className="file-row"><span className="file-glyph">B</span><span>main.blorr</span><span className="file-unsaved"/></div>
         <BlockLibrary query={query} onQueryChange={setQuery} onDragStart={(event,kind)=>onDragStart(event,{source:"library",kind})} onAddBlock={addBlock} />
       </aside>
+      <div className="sidebar-resizer" role="separator" aria-label="Resize sidebar" title="Drag to resize sidebar" onPointerDown={e=>{e.preventDefault();sidebarResizeOrigin.current={x:e.clientX,width:sidebarWidth};document.body.classList.add("resizing-sidebar");}}><span/></div>
       <section className="editor">
         <div className="tabbar"><div className="editor-tab"><span className="tab-file-icon">B</span>main.blorr<span className="tab-unsaved"/></div><div className="tabbar-spacer"/><span className="tab-language">BLORRL</span><button className="icon-button tab-export" title="Export source" onClick={exportSource}><Download size={15}/></button></div>
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
@@ -512,7 +530,7 @@ export default function App() {
             const ids = selectedIds.length > 1 ? selectedIds : reporter ? [block.id] : blocks.slice(Math.max(0,blockIndex)).map(item=>item.id);
             if (!selected.includes(block.id)) setSelected(selectedIds);
             const origins: Record<string,{x:number;y:number}> = {};
-            ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:104 + blocks.findIndex(item=>item.id===id)*104}; });
+            ids.forEach(id => { origins[id] = positionsRef.current[id] ?? {x:42,y:90 + blocks.findIndex(item=>item.id===id)*86}; });
             blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
             snapGhostRef.current = null;
             setSnapGhost(null);

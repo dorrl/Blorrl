@@ -369,3 +369,29 @@
   font: 10px var(--mono);
 }
 .condition-slot .inline-reporter { flex-wrap: nowrap; }
+
+
+/* Resizable explorer divider and refined dark scrollbars. */
+.sidebar-resizer {
+  position: relative; z-index: 5; flex: 0 0 6px; width: 6px;
+  margin-left: -1px; margin-right: -1px; display: flex; align-items: center;
+  justify-content: center; background: #17191e; border-left: 1px solid #111318;
+  border-right: 1px solid #111318; cursor: col-resize; touch-action: none;
+}
+.sidebar-resizer span {
+  width: 2px; height: 34px; border-radius: 2px; background: #515966;
+  transition: background .12s, height .12s;
+}
+.sidebar-resizer:hover, .resizing-sidebar .sidebar-resizer { background: #29313a; }
+.sidebar-resizer:hover span, .resizing-sidebar .sidebar-resizer span { height: 48px; background: var(--accent); }
+.resizing-sidebar, .resizing-sidebar * { cursor: col-resize !important; user-select: none !important; }
+:root { scrollbar-color: #505967 #202329; scrollbar-width: thin; }
+* { scrollbar-width: thin; scrollbar-color: #4a5360 #202329; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: #202329; border-radius: 8px; }
+*::-webkit-scrollbar-thumb { background: #424b58; border: 2px solid #202329; border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background: #69788b; }
+*::-webkit-scrollbar-corner { background: #202329; }
+.block-canvas::-webkit-scrollbar-track, .catalog-list::-webkit-scrollbar-track, .terminal-output::-webkit-scrollbar-track { background: #1b1d22; }
+.block-canvas::-webkit-scrollbar-thumb, .catalog-list::-webkit-scrollbar-thumb, .terminal-output::-webkit-scrollbar-thumb { border-color: #1b1d22; }
+@media(max-width:760px) { .sidebar-resizer { flex-basis: 5px; width: 5px; } }
