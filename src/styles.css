@@ -2109,3 +2109,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .snap-ghost.snap-ghost-stack.value-snap-ghost > .block-card {
   max-width: min(520px, calc(100vw - 40px));
 }
+
+
+/* Hide the real dragged blocks only while their snap ghost is visible. */
+.block-card.ghost-source-hidden {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Keep the preview geometrically identical while making the entire stack translucent. */
+.snap-ghost.snap-ghost-stack {
+  opacity: .58;
+}
+.snap-ghost.snap-ghost-stack > .block-card {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  filter: none;
+}
