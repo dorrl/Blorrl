@@ -121,10 +121,11 @@ export default function App() {
             id,
             x: element.offsetLeft,
             y: element.offsetTop + element.offsetHeight - 8,
-            distance: Math.hypot(event.clientX - (rect.left + rect.width / 2), event.clientY - rect.bottom)
+            distance: Math.abs(event.clientY - rect.bottom),
+            horizontal: event.clientX >= rect.left - 14 && event.clientX <= rect.right + 14
           } : null;
         })
-        .filter((item): item is { id: string; x: number; y: number; distance: number } => item !== null && item.distance < 70)
+        .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 18 && item.horizontal)
         .sort((a, b) => a.distance - b.distance)[0];
 
       const startNode = canvas.querySelector<HTMLElement>(".start-node");
@@ -133,11 +134,19 @@ export default function App() {
         id: "__start",
         x: startNode.offsetLeft,
         y: startNode.offsetTop + startNode.offsetHeight - 8,
-        distance: Math.hypot(event.clientX - (startRect.left + startRect.width / 2), event.clientY - startRect.bottom)
+        distance: Math.abs(event.clientY - startRect.bottom),
+        horizontal: event.clientX >= startRect.left - 14 && event.clientX <= startRect.right + 14
       } : null;
-      const snap = startCandidate && startCandidate.distance < 70 && (!candidate || startCandidate.distance < candidate.distance)
+      const canvasRect = canvas.getBoundingClientRect();
+      const conditionCandidate = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
+        .map(slot => {
+          const rect = slot.getBoundingClientRect();
+          const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
+          return inside ? {id:"__condition__:"+slot.dataset.conditionFor, x:rect.left-canvasRect.left+canvas.scrollLeft, y:rect.top-canvasRect.top+canvas.scrollTop, distance:0, horizontal:true} : null;
+        }).find(item => item !== null) ?? null;
+      const snap = conditionCandidate ?? (startCandidate && startCandidate.distance < 18 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
-        : candidate;
+        : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
       snapGhostRef.current = ghost;
       setSnapGhost(ghost);
@@ -151,20 +160,35 @@ export default function App() {
       const ghost = snapGhostRef.current;
       if (ghost) {
         const canvas = canvasRef.current;
-        setBlocks(current => {
-          const moving = current.filter(block => drag.ids.includes(block.id));
-          const rest = current.filter(block => !drag.ids.includes(block.id));
-          const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
-          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
-          return rest;
-        });
         const next: Record<string, { x: number; y: number }> = { ...positionsRef.current };
-        let y = ghost.y;
-        drag.ids.forEach(id => {
-          next[id] = { x: ghost.x, y };
-          const movingElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
-          y += (movingElement?.offsetHeight ?? 88) - 8;
-        });
+        if (ghost.targetId.startsWith("__condition__:")) {
+          const targetId = ghost.targetId.slice("__condition__:".length);
+          setBlocks(current => {
+            const child = current.find(block => drag.ids.includes(block.id));
+            if (!child || (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare")) return current;
+            return putCondition(removeIds(current, drag.ids), targetId, child);
+          });
+          drag.ids.forEach(id => delete next[id]);
+          setSelected(drag.ids.slice(0,1));
+        } else {
+          const movingHeight = drag.ids.reduce((sum,id) => sum + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 8, 0);
+          setBlocks(current => {
+            const moving = current.filter(block => drag.ids.includes(block.id));
+            const rest = current.filter(block => !drag.ids.includes(block.id));
+            const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
+            rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...moving);
+            return rest;
+          });
+          Object.entries(next).forEach(([id, point]) => {
+            if (!drag.ids.includes(id) && point.y >= ghost.y) next[id] = {x:point.x,y:point.y+movingHeight};
+          });
+          let y = ghost.y;
+          drag.ids.forEach(id => {
+            next[id] = { x: ghost.x, y };
+            const movingElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
+            y += (movingElement?.offsetHeight ?? 38) - 8;
+          });
+        }
         setPositions(next);
         setStatus("idle");
       }
