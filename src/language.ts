@@ -1,15 +1,51 @@
-export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "add";
+export type BlockKind = "print" | "let" | "input" | "get" | "if" | "repeat" | "add" | "boolean" | "compare";
 export type ValueType = "number" | "string" | "boolean";
 export type Branch = { id: string; condition: string; children: Block[] };
 export type Block = {
   id: string; kind: BlockKind; value: string; name?: string; right?: string;
-  operator?: "+" | "-" | "*" | "/"; types?: ValueType[]; children?: Block[];
+  operator?: "+" | "-" | "*" | "/"; comparisonOperator?: "==" | ">=" | "<="; types?: ValueType[]; children?: Block[]; conditionBlock?: Block;
   elseIf?: Branch[]; elseChildren?: Block[]; elseId?: string;
 };
 export type Compilation = { code: string; errors: string[] };
 export type RunResult = { output: string; error?: string };
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const reserved = new Set(["print", "let", "input", "get", "if", "repeat", "true", "false", "else"]);
+const reserved = new Set(["print", "let", "input", "get", "if", "repeat", "true", "false", "else", "boolean", "compare"]);
+
+function selectedLiteralType(block: Block): ValueType {
+  const types = block.types?.length ? block.types : ["number"];
+  const value = block.value.trim();
+  if (types.includes("number") && value !== "" && Number.isFinite(Number(value))) return "number";
+  if (types.includes("boolean") && (value === "true" || value === "false")) return "boolean";
+  if (types.includes("string")) return "string";
+  return types[0] ?? "number";
+}
+function literalForLanguage(block: Block): string {
+  const type = selectedLiteralType(block);
+  if (type === "string") return JSON.stringify(block.value);
+  if (type === "boolean") return block.value.trim() === "true" ? "true" : "false";
+  return block.value.trim() !== "" && Number.isFinite(Number(block.value)) ? String(Number(block.value)) : "0";
+}
+function literalForRuntime(block: Block): Value {
+  const type = selectedLiteralType(block);
+  if (type === "string") return block.value;
+  if (type === "boolean") return block.value.trim() === "true";
+  const value = Number(block.value);
+  if (block.value.trim() === "" || !Number.isFinite(value)) throw new Error(`Variable "${block.name ?? "value"}" needs a numeric literal.`);
+  return value;
+}
+function literalForC(block: Block): string {
+  const type = selectedLiteralType(block);
+  if (type === "string") return JSON.stringify(block.value);
+  if (type === "boolean") return block.value.trim() === "true" ? "1" : "0";
+  const value = Number(block.value);
+  if (block.value.trim() === "" || !Number.isFinite(value)) throw new Error(`Variable "${block.name ?? "value"}" needs a numeric literal.`);
+  return String(value);
+}
+function conditionExpression(block: Block): string {
+  if (block.kind === "boolean") return block.value === "true" ? "true" : "false";
+  if (block.kind === "compare") return "(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")";
+  throw new Error("An if condition needs a true/false or comparison block.");
+}
 
 export function compile(blocks: Block[]): Compilation {
   const errors: string[] = [];
@@ -23,7 +59,7 @@ export function compile(blocks: Block[]): Compilation {
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) errors.push("Block " + line + ": invalid variable name \"" + name + "\".");
-          else lines.push(pad + "let " + name + " = " + (block.value || "0") + ";");
+          else lines.push(pad + "let " + name + " = " + literalForLanguage(block) + ";");
           break;
         }
         case "input": {
@@ -33,8 +69,10 @@ export function compile(blocks: Block[]): Compilation {
           break;
         }
         case "get": lines.push(pad + "print " + (block.value || "value") + ";"); break;
+        case "boolean": lines.push(pad + "print " + (block.value === "true" ? "true" : "false") + ";"); break;
+        case "compare": lines.push(pad + "print (" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ");"); break;
         case "if":
-          lines.push(pad + "if (" + (block.value || "false") + ") {");
+          lines.push(pad + "if (" + (block.conditionBlock ? conditionExpression(block.conditionBlock) : "false") + ") {");
           emit(block.children ?? [], depth + 1); lines.push(pad + "}");
           for (const branch of block.elseIf ?? []) {
             lines.push(pad + "else if (" + (branch.condition || "false") + ") {");
@@ -172,7 +210,7 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
         case "let": {
           const name = block.name?.trim() ?? "";
           if (!identifier.test(name) || reserved.has(name)) throw new Error("Invalid variable name \"" + name + "\".");
-          variables.set(name, evaluate(block.value || "0", variables)); break;
+          variables.set(name, literalForRuntime(block)); break;
         }
         case "input": {
           const name = block.name?.trim() ?? "";
@@ -187,8 +225,10 @@ export function runProgram(compilation: Compilation, stdin: string, blocks?: Blo
           break;
         }
         case "add": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.operator ?? "+") + " (" + (block.right || "1") + ")", variables))); break;
+        case "boolean": output.push(block.value === "true" ? "true" : "false"); break;
+        case "compare": output.push(String(evaluate("(" + (block.value || "0") + ") " + (block.comparisonOperator ?? "==") + " (" + (block.right || "0") + ")", variables))); break;
         case "if": {
-          if (Boolean(evaluate(block.value || "false", variables))) execute(block.children ?? []);
+          if (Boolean(block.conditionBlock ? evaluate(conditionExpression(block.conditionBlock), variables) : false)) execute(block.children ?? []);
           else {
             let handled = false;
             for (const branch of block.elseIf ?? []) if (Boolean(evaluate(branch.condition || "false", variables))) { execute(branch.children); handled = true; break; }
@@ -219,6 +259,7 @@ export function compileC(blocks: Block[]): Compilation {
         if (!identifier.test(name) || reserved.has(name)) errors.push("Invalid variable name \"" + name + "\".");
         else names.set(name, b.types?.includes("string") && !b.types.includes("number") ? "string" : b.types?.includes("boolean") && !b.types.includes("number") ? "boolean" : "number");
       }
+      if (b.conditionBlock) scan([b.conditionBlock]);
       scan(b.children ?? []);
       for (const branch of b.elseIf ?? []) scan(branch.children);
       if (b.elseChildren) scan(b.elseChildren);
@@ -241,14 +282,16 @@ export function compileC(blocks: Block[]): Compilation {
         const name = b.value.trim();
         if (!identifier.test(name) || !names.has(name)) errors.push("Unknown variable \"" + name + "\".");
         else lines.push(pad + "printf(" + (names.get(name) === "string" ? '"%s\\\\n", ' : '"%.15g\\\\n", ') + name + ");");
-      } else if (b.kind === "let") lines.push(pad + (b.name?.trim() ?? "value") + " = " + expr(b.value || "0") + ";");
+      } else if (b.kind === "let") lines.push(pad + (b.name?.trim() ?? "value") + " = " + literalForC(b) + ";");
       else if (b.kind === "input") {
         const name = b.name?.trim() ?? "value";
         if (names.get(name) === "string") lines.push(`${pad}{ static char buf_${name}[4096]; if (fgets(buf_${name}, sizeof(buf_${name}), stdin)) { buf_${name}[strcspn(buf_${name}, "\\n")] = 0; ${name} = buf_${name}; } }`);
         else lines.push(`${pad}scanf("%lf", &${name});`);
       } else if (b.kind === "add") lines.push(`${pad}printf("%.15g\\n", (${expr(b.value || "0")}) ${b.operator ?? "+"} (${expr(b.right || "1")}));`);
+      else if (b.kind === "boolean") lines.push(pad + "printf(\"%s\\n\", " + (b.value === "true" ? "\"true\"" : "\"false\"") + ");");
+      else if (b.kind === "compare") lines.push(pad + "printf(\"%d\\n\", (" + expr(b.value || "0") + ") " + (b.comparisonOperator ?? "==") + " (" + expr(b.right || "0") + "));");
       else if (b.kind === "if") {
-        lines.push(pad + "if (" + expr(b.value || "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
+        lines.push(pad + "if (" + (b.conditionBlock ? expr(conditionExpression(b.conditionBlock)) : "0") + ") {"); emit(b.children ?? [],depth+1); lines.push(pad+"}");
         for (const br of b.elseIf ?? []) { lines.push(pad+"else if ("+expr(br.condition||"0")+") {");emit(br.children,depth+1);lines.push(pad+"}"); }
         if (b.elseChildren) {lines.push(pad+"else {");emit(b.elseChildren,depth+1);lines.push(pad+"}");}
       } else if (b.kind === "repeat") {
