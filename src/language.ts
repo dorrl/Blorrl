@@ -333,6 +333,12 @@ export function compileAssembly(blocks: Block[]): Compilation {
     let tokens: Token[];
     try { tokens = tokenize(value).filter(token => token.kind !== "eof"); }
     catch (error) { errors.push(error instanceof Error ? error.message : String(error)); code.push("  xor eax, eax"); return; }
+    if (tokens.length === 2 && tokens[0]!.kind === "operator" && (tokens[0]!.value === "-" || tokens[0]!.value === "+") && tokens[1]!.kind === "number") {
+      const number = Number(tokens[1]!.value) * (tokens[0]!.value === "-" ? -1 : 1);
+      if (!Number.isSafeInteger(number)) errors.push("Assembly backend currently requires whole-number literals: " + value);
+      code.push("  mov rax, " + (Number.isSafeInteger(number) ? String(number) : "0"));
+      return;
+    }
     if (tokens.length === 1) {
       const token = tokens[0]!;
       if (token.kind === "number") {
@@ -473,15 +479,21 @@ export function compileAssembly(blocks: Block[]): Compilation {
     ".text",
     ".globl main",
     ".def main; .scl 2; .type 32; .endef",
+    ".seh_proc main",
     "main:",
     "  push rbp",
+    "  .seh_pushreg rbp",
     "  mov rbp, rsp",
+    "  .seh_setframe rbp, 0",
     "  sub rsp, 32",
+    "  .seh_stackalloc 32",
+    "  .seh_endprologue",
     ...code,
     "  xor eax, eax",
     "  add rsp, 32",
     "  pop rbp",
     "  ret",
+    ".seh_endproc",
     ".data",
     ...data,
   ];
