@@ -209,10 +209,36 @@ export default function App() {
         setBlocks(current => {
           const moving = current.filter(block => drag.ids.includes(block.id));
           const rest = current.filter(block => !drag.ids.includes(block.id));
+          const parentId = ghost.targetId === "__start" ? "__start" : ghost.targetId;
           const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
-          const attached = moving.map((block, index) => ({ ...block, attachedTo: index === 0 ? (ghost.targetId === "__start" ? "__start" : ghost.targetId) : moving[index - 1]!.id }));
+          // Preserve the old successor: after inserting a stack, it must follow
+          // the inserted stack's tail, not compete with its first block for parentId.
+          if (moving.length) {
+            for (let index = 0; index < rest.length; index++) {
+              if (rest[index]!.attachedTo === parentId) {
+                rest[index] = { ...rest[index]!, attachedTo: moving[moving.length - 1]!.id };
+              }
+            }
+          }
+          const attached = moving.map((block, index) => ({
+            ...block,
+            attachedTo: index === 0 ? parentId : moving[index - 1]!.id,
+          }));
           rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
           return rest;
+        });
+        const insertedHeight = drag.ids.reduce((total, id) =>
+          total + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
+        const targetElement = ghost.targetId === "__start"
+          ? canvas?.querySelector<HTMLElement>(".start-node")
+          : canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
+        const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : ghost.y;
+        // Make physical room too; attachment changes alone leave the old successor
+        // occupying the same pixels as the newly inserted block.
+        Object.entries(next).forEach(([id, point]) => {
+          if (!drag.ids.includes(id) && id !== ghost.targetId && point.y >= targetBottom) {
+            next[id] = { ...point, y: point.y + insertedHeight };
+          }
         });
         let y = ghost.y;
         drag.ids.forEach(id => {
@@ -332,9 +358,13 @@ export default function App() {
     const blockHeight = kind === "if" || kind === "repeat" ? 90 : kind === "compare" ? 42 : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38 : 42;
     setPositions(current => {
       const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
-      if (beforeId && targetPosition) Object.entries(current).forEach(([id,point]) => {
-        if (id !== block.id && point.y >= insertY) next[id] = {x:point.x,y:point.y+blockHeight-8};
-      });
+      if (beforeId && targetPosition) {
+        const targetHeight = targetElement?.offsetHeight ?? 88;
+        const shiftFrom = targetPosition.y + targetHeight - 10;
+        Object.entries(current).forEach(([id,point]) => {
+          if (id !== block.id && id !== beforeId && point.y >= shiftFrom) next[id] = {x:point.x,y:point.y+blockHeight-1};
+        });
+      }
       return next;
     });
     setBlocks(current => {
@@ -514,6 +544,27 @@ export default function App() {
         if (id) candidates.push({id,x:element.offsetLeft,y:element.offsetTop+element.offsetHeight-1,distance});
       }
     });
+    // When the pointer is below the current flow, offer an append target even
+    // if it is no longer close enough to a block's bottom edge.
+    if (!candidates.length) {
+      const canvasRect = canvas.getBoundingClientRect();
+      if (event.clientX >= canvasRect.left + 8 && event.clientX <= canvasRect.right - 8) {
+        const attached = getStartAttachedBlocks(blocks);
+        const last = attached[attached.length - 1];
+        const lastElement = last
+          ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${last.id}"]`)
+          : null;
+        const fallback = lastElement ?? start;
+        if (fallback && event.clientY >= fallback.getBoundingClientRect().bottom - 2) {
+          candidates.push({
+            id: lastElement?.dataset.blockId ?? "__start",
+            x: fallback.offsetLeft,
+            y: fallback.offsetTop + fallback.offsetHeight - 1,
+            distance: Math.abs(event.clientY - fallback.getBoundingClientRect().bottom) + 34,
+          });
+        }
+      }
+    }
     const nearest = candidates.sort((a,b)=>a.distance-b.distance)[0];
     const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : null;
     const previous = snapGhostRef.current;
