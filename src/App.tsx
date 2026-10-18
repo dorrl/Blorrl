@@ -35,7 +35,11 @@ export default function App() {
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
   const [spaceDown, setSpaceDown] = useState(false);
   const panOrigin = useRef<{x:number;y:number;left:number;top:number}|null>(null);
-  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);\n  const blockPointerDrag = useRef<BlockPointerDrag | null>(null);\n  const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);\n  const snapGhostRef = useRef<SnapGhost | null>(null);\n  snapGhostRef.current = snapGhost;
+  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
+  const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
+  const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
+  const snapGhostRef = useRef<SnapGhost | null>(null);
+  snapGhostRef.current = snapGhost;
   const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
