@@ -319,3 +319,53 @@
   .block-card.kind-compare .value-input { width: 48px; }
   .value-chip { max-width: 120px; }
 }
+
+
+.inline-reporter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+.inline-reporter .inline-operator-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.inline-reporter .value-slot {
+  min-width: 44px;
+  max-width: 110px;
+  min-height: 22px;
+  padding: 1px 3px;
+}
+.inline-reporter .value-input {
+  min-width: 30px;
+  width: 48px;
+  max-width: 80px;
+  font-size: 10px;
+}
+.inline-reporter select {
+  width: 32px;
+  min-width: 32px;
+  border: 1px solid #8b9aae;
+  border-radius: 4px;
+  padding: 1px;
+  background: #1b2633;
+  color: white;
+  font: 700 10px var(--mono);
+}
+.inline-get {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.inline-get input {
+  width: 70px;
+  max-width: 100px;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: 10px var(--mono);
+}
+.condition-slot .inline-reporter { flex-wrap: nowrap; }
