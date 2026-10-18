@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { DragEvent, MouseEvent, ReactNode } from "react";
 import { Play, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check, Save, FolderOpen } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
@@ -274,7 +274,7 @@ export default function App() {
     const ownerElement = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`);
     const canvasRect = canvas?.getBoundingClientRect();
     const ownerRect = ownerElement?.getBoundingClientRect();
-    const point = canvasRect && ownerRect ? {
+    const point = canvas && canvasRect && ownerRect ? {
       x: Math.max(12, ownerRect.left - canvasRect.left + canvas.scrollLeft + 24),
       y: Math.max(64, ownerRect.top - canvasRect.top + canvas.scrollTop + 44),
     } : {x:42,y:104};
@@ -397,7 +397,7 @@ export default function App() {
       dragOrigin.current = {x:event.clientX,y:event.clientY,ids,origins};
     }
   }
-  function onBlockDragEnd(event: DragEvent, id: string) {
+  function onBlockDragEnd(event: DragEvent) {
     const drag = dragOrigin.current;
     if (!drag) return;
     dragOrigin.current = null;
@@ -605,7 +605,7 @@ export default function App() {
                 </div>
                 {(block.kind === "if" || block.kind === "repeat") && <div className="nested-flow" data-drop-into={block.id} onDragOver={e=>e.preventDefault()} onDrop={e=>onDrop(e,block.id)}>
                   <div className="nested-label">{block.kind === "if" ? "THEN" : "REPEAT BODY"} <span>DROP BLOCKS HERE</span></div>
-                  {(block.children ?? []).map((child,i)=><div className="nested-item" key={child.id} data-block-id={child.id} data-drop-into={child.kind==="if"||child.kind==="repeat"?child.id:undefined} draggable onDragOver={e=>e.preventDefault()} onDrop={e=>{e.stopPropagation();onDrop(e,child.id);}} onClick={e=>{e.stopPropagation();selectBlock(e as unknown as MouseEvent,child.id);}} onDragStart={e=>onDragStart(e,{source:"canvas",ids:selected.includes(child.id)?selected:(block.children??[]).slice(i).map(sibling=>sibling.id)})} onDragEnd={e=>onBlockDragEnd(e,child.id)} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.stopPropagation();onDrop(e,child.id);}}>
+                  {(block.children ?? []).map((child,i)=><div className="nested-item" key={child.id} data-block-id={child.id} data-drop-into={child.kind==="if"||child.kind==="repeat"?child.id:undefined} draggable onDragOver={e=>e.preventDefault()} onDrop={e=>{e.stopPropagation();onDrop(e,child.id);}} onClick={e=>{e.stopPropagation();selectBlock(e as unknown as MouseEvent,child.id);}} onDragStart={e=>onDragStart(e,{source:"canvas",ids:selected.includes(child.id)?selected:(block.children??[]).slice(i).map(sibling=>sibling.id)})} onDragEnd={onBlockDragEnd}>
                     <span className="nested-grip"><GripVertical size={12}/></span><strong>{catalog.find(c=>c.kind===child.kind)?.label ?? child.kind}</strong>{(child.kind==="let"||child.kind==="input")&&<input aria-label="Nested variable name" value={child.name??""} onChange={e=>updateBlock(child.id,{name:e.target.value})} onClick={e=>e.stopPropagation()}/>}<input className="nested-expression" aria-label="Nested block value" value={child.value} onChange={e=>updateBlock(child.id,{value:e.target.value})} onClick={e=>e.stopPropagation()}/>
                   </div>)}
                   {!(block.children ?? []).length && <div className="nested-empty">Drop blocks into this area</div>}
