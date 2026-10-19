@@ -156,7 +156,7 @@ export default function App() {
             x: element.offsetLeft,
             y: element.offsetTop + element.offsetHeight - 1,
             distance: Math.abs(movingTop - rect.bottom),
-            horizontal: movingRight >= rect.left - 14 && movingLeft <= rect.right + 14
+            horizontal: movingRight >= rect.left - 6 && movingLeft <= rect.right + 6
           } : null;
         })
         .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 18 && item.horizontal)
@@ -169,7 +169,7 @@ export default function App() {
         x: startNode.offsetLeft,
         y: startNode.offsetTop + startNode.offsetHeight - 1,
         distance: Math.abs(movingTop - startRect.bottom),
-        horizontal: movingRight >= startRect.left - 14 && movingLeft <= startRect.right + 14
+        horizontal: movingRight >= startRect.left - 6 && movingLeft <= startRect.right + 6
       } : null;
       const movingElementForSocket = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const canBeCondition = !!movingElementForSocket && ["kind-true","kind-false","kind-compare"].some(kind => movingElementForSocket.classList.contains(kind));
@@ -186,6 +186,27 @@ export default function App() {
         ? startCandidate
         : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
+      // During stack insertion, shift existing blocks below the target down by
+      // the incoming stack's height so the preview matches the resulting layout.
+      // These are the original elements; no placeholder or clone is created.
+      if (ghost && !ghost.targetId.startsWith("__value__:") && !ghost.targetId.startsWith("__condition__:")) {
+        const insertedHeight = drag.ids.reduce((total, id) =>
+          total + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
+        const targetElement = ghost.targetId === "__start"
+          ? canvas.querySelector<HTMLElement>(".start-node")
+          : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
+        const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : ghost.y;
+        Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
+          const id = element.dataset.blockId;
+          if (!id || drag.ids.includes(id) || id === ghost.targetId) return;
+          const origin = positionsRef.current[id] ?? {x: element.offsetLeft, y: element.offsetTop};
+          if (origin.y >= targetBottom) {
+            element.style.willChange = "transform";
+            element.style.transform = `translate(0px, ${insertedHeight}px)`;
+            insertionPreviewElementsRef.current.push(element);
+          }
+        });
+      }
       // While a valid connection is predicted, temporarily pin the dragged
       // original block(s) to the predicted final layout and fade them slightly.
       // No placeholder or cloned preview element is created.
