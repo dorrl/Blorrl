@@ -328,10 +328,10 @@ export default function App() {
       const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
 
-      // Palette cards have special sizing rules, so cloning one without
-      // removing those rules cannot match a workspace block. Keep the same
-      // block DOM/content, but render it with the canonical canvas-card width
-      // and normal flow positioning inside the ghost container.
+      // Show the palette block at full opacity and let the normal block-card
+      // CSS determine its geometry. Do not impose a ghost-specific width,
+      // max-width, zoom, or opacity: those overrides made it differ from a
+      // block after it had been dropped onto the canvas.
       const ghost = source.cloneNode(true) as HTMLElement;
       ghost.classList.remove("library-block-preview", "selected", "ghost-source-hidden");
       ghost.setAttribute("aria-hidden", "true");
@@ -349,13 +349,9 @@ export default function App() {
         position: "relative",
         left: "auto",
         top: "auto",
-        width: "330px",
-        maxWidth: "none",
-        minWidth: "0",
         margin: "0",
-        opacity: "0.55",
-        pointerEvents: "none",
-        boxSizing: "border-box"
+        opacity: "1",
+        pointerEvents: "none"
       });
       container.appendChild(ghost);
       return;
