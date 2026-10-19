@@ -327,38 +327,22 @@ export default function App() {
     if (libraryDragKind) {
       const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
-      const isValueTarget = snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:");
-      const sourceRect = source.getBoundingClientRect();
-      const ghost = isValueTarget ? document.createElement("span") : source.cloneNode(true) as HTMLElement;
-      if (isValueTarget) {
-        ghost.className = `value-chip kind-${libraryDragKind}`;
-        if (libraryDragKind === "true" || libraryDragKind === "false") ghost.textContent = libraryDragKind;
-        else {
-          const reporter = source.querySelector<HTMLElement>(".inline-reporter, .inline-get");
-          if (reporter) ghost.appendChild(reporter.cloneNode(true));
-        }
-      }
-      ghost.classList.remove("selected", "library-block-preview");
+
+      // Use the palette block's DOM as-is: no synthetic value-chip, width
+      // measurement, zoom, or flex/layout overrides. Only make the clone
+      // translucent and non-interactive.
+      const ghost = source.cloneNode(true) as HTMLElement;
       ghost.setAttribute("aria-hidden", "true");
       ghost.setAttribute("inert", "");
       ghost.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => {
         element.setAttribute("disabled", "");
         element.setAttribute("tabindex", "-1");
       });
-      Object.assign(ghost.style, {
-        position: "relative", left: "auto", top: "auto", transform: "none", zoom: "1",
-        // Top-level palette clones must retain the palette's already-resolved
-        // dimensions.  Re-running flex sizing inside the ghost caused Set to
-        // wrap and Print's value slot to overflow.
-        width: isValueTarget ? "" : `${sourceRect.width}px`,
-        maxWidth: isValueTarget ? "" : `${sourceRect.width}px`,
-        minWidth: "",
-        minHeight: isValueTarget ? "0" : `${sourceRect.height}px`, margin: "0", boxSizing: "border-box", pointerEvents: "none"
-      });
+      ghost.style.opacity = "0.55";
+      ghost.style.pointerEvents = "none";
       container.appendChild(ghost);
       return;
     }
-
     if (!dragPreview) return;
     dragPreview.ids.forEach((id, index) => {
       const source = Array.from(canvasRef.current!.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(element => element.dataset.blockId === id);
