@@ -527,6 +527,8 @@ export default function App() {
     if (spaceDown || (payload.source === "canvas" && (event.target as HTMLElement).closest("input,button"))) { event.preventDefault(); return; }
     event.dataTransfer.effectAllowed = payload.source === "library" ? "copy" : "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
+    // Some browsers require a plain-text payload before they initiate native drag.
+    event.dataTransfer.setData("text/plain", payload.source === "library" ? payload.kind : payload.ids.join(","));
     if (payload.source === "library") {
       // Hide the browser's native drag bitmap; the actual palette element is moved below.
       const dragImage = document.createElement("div");
@@ -542,7 +544,7 @@ export default function App() {
         const rect = source.getBoundingClientRect();
         Object.assign(source.style, {
           position: "fixed", left: String(rect.left) + "px", top: String(rect.top) + "px",
-          width: "330px", minHeight: "88px", maxWidth: "none", margin: "0", zIndex: "1000", opacity: ".58",
+          width: String(rect.width) + "px", maxWidth: "none", margin: "0", zIndex: "1000", opacity: ".58",
           pointerEvents: "none", transform: "none",
         });
         source.classList.add("library-drag-active");
