@@ -140,11 +140,9 @@ export default function App() {
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const movingOrigin = drag.origins[drag.ids[0] ?? ""];
       const canvasRect = canvas.getBoundingClientRect();
-      // Snap when the dragged stack's top edge reaches the target's bottom edge,
-      // independent of where inside the dragged block the pointer was grabbed.
-      const movingTop = canvasRect.top + (movingOrigin?.y ?? movingElement?.offsetTop ?? 0) + dy - canvas.scrollTop;
-      const movingLeft = canvasRect.left + (movingOrigin?.x ?? movingElement?.offsetLeft ?? 0) + dx - canvas.scrollLeft;
-      const movingRight = movingLeft + (movingElement?.offsetWidth ?? 0);
+      // Snap hit-testing follows the pointer itself, not the dragged block's bounds.
+      const pointerX = event.clientX;
+      const pointerY = event.clientY;
       const isLooseReporterDrag = drag.ids.length === 1 && !!movingElement && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind => movingElement.classList.contains(kind));
       const candidate = isLooseReporterDrag ? undefined : Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
         .filter(element => !drag.ids.includes(element.dataset.blockId ?? "") && !["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>element.classList.contains(kind)))
@@ -155,8 +153,8 @@ export default function App() {
             id,
             x: element.offsetLeft,
             y: element.offsetTop + element.offsetHeight - 1,
-            distance: Math.abs(movingTop - rect.bottom),
-            horizontal: movingRight >= rect.left - 6 && movingLeft <= rect.right + 6
+            distance: Math.abs(pointerY - rect.bottom),
+            horizontal: pointerX >= rect.left - 6 && pointerX <= rect.right + 6
           } : null;
         })
         .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 18 && item.horizontal)
@@ -168,8 +166,8 @@ export default function App() {
         id: "__start",
         x: startNode.offsetLeft,
         y: startNode.offsetTop + startNode.offsetHeight - 1,
-        distance: Math.abs(movingTop - startRect.bottom),
-        horizontal: movingRight >= startRect.left - 6 && movingLeft <= startRect.right + 6
+        distance: Math.abs(pointerY - startRect.bottom),
+        horizontal: pointerX >= startRect.left - 6 && pointerX <= startRect.right + 6
       } : null;
       const movingElementForSocket = drag.ids.length === 1 ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const canBeCondition = !!movingElementForSocket && ["kind-true","kind-false","kind-compare"].some(kind => movingElementForSocket.classList.contains(kind));
