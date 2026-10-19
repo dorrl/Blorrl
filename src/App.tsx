@@ -577,26 +577,29 @@ export default function App() {
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
     const source = libraryDragElementRef.current;
-    if (source) {
-      source.style.left = String(event.clientX - 12) + "px";
-      source.style.top = String(event.clientY - 18) + "px";
-    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const canvasRect = canvas.getBoundingClientRect();
+    // Position the original palette element at the predicted post-drop location.
+    // snapGhost remains target metadata only; no extra preview element is rendered.
+    const positionOriginalAt = (x: number, y: number) => {
+      if (!source) return;
+      source.style.left = String(canvasRect.left + x - canvas.scrollLeft) + "px";
+      source.style.top = String(canvasRect.top + y - canvas.scrollTop) + "px";
+    };
     const isValueReporter = ["add", "compare", "true", "false", "get"].includes(kind);
     const isConditionReporter = ["compare", "true", "false"].includes(kind);
     if (isValueReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
         .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; return inside ? {id:`__value__:${slot.dataset.valueFor}:${slot.dataset.valueField}`,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2,area:rect.width*rect.height} : null; })
         .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
-      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; positionOriginalAt(ghost.x, ghost.y); if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
     if (isConditionReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; return inside ? {id:`__condition__:${slot.dataset.conditionFor}`,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2} : null; })
         .find((item): item is {id:string;x:number;y:number} => item !== null);
-      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; positionOriginalAt(ghost.x, ghost.y); if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
     // Keep a real, unscaled block under the pointer even before it reaches a
     // compatible socket. This replaces the browser's native drag screenshot.
@@ -608,6 +611,7 @@ export default function App() {
     });
     if (isValueReporter) {
       const ghost = freeGhost();
+      positionOriginalAt(ghost.x, ghost.y);
       if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
       snapGhostRef.current = ghost;
       return;
@@ -650,6 +654,7 @@ export default function App() {
     }
     const nearest = candidates.sort((a,b)=>a.distance-b.distance)[0];
     const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : freeGhost();
+    positionOriginalAt(nextGhost.x, nextGhost.y);
     const previous = snapGhostRef.current;
     if (!nextGhost || !previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
     snapGhostRef.current = nextGhost;
@@ -873,7 +878,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && !libraryDragKind && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
+
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>
