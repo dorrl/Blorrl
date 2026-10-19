@@ -541,13 +541,18 @@ export default function App() {
       if (source) {
         libraryDragElementRef.current = source;
         libraryDragOriginalStyleRef.current = source.getAttribute("style");
+        // Do not relocate the native drag source synchronously inside dragstart:
+        // Chromium can cancel the drag if its source is reparented/restyled immediately.
         const rect = source.getBoundingClientRect();
-        Object.assign(source.style, {
-          position: "fixed", left: String(rect.left) + "px", top: String(rect.top) + "px",
-          width: String(rect.width) + "px", maxWidth: "none", margin: "0", zIndex: "1000", opacity: ".58",
-          pointerEvents: "none", transform: "none",
+        requestAnimationFrame(() => {
+          if (libraryDragElementRef.current !== source) return;
+          Object.assign(source.style, {
+            position: "fixed", left: String(rect.left) + "px", top: String(rect.top) + "px",
+            width: String(rect.width) + "px", maxWidth: "none", margin: "0", zIndex: "1000", opacity: ".58",
+            pointerEvents: "none", transform: "none",
+          });
+          source.classList.add("library-drag-active");
         });
-        source.classList.add("library-drag-active");
       }
       libraryDragKindRef.current = payload.kind;
       setLibraryDragKind(payload.kind);
