@@ -489,6 +489,12 @@ export default function App() {
     event.dataTransfer.effectAllowed = payload.source === "library" ? "copy" : "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "library") {
+      // Hide the browser's native drag bitmap; the actual palette element is moved below.
+      const dragImage = document.createElement("div");
+      dragImage.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0";
+      document.body.appendChild(dragImage);
+      event.dataTransfer.setDragImage(dragImage, 0, 0);
+      requestAnimationFrame(() => dragImage.remove());
       // Move the existing palette block itself; do not create a duplicate preview.
       const source = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(".library-block-preview");
       if (source) {
