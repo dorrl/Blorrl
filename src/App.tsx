@@ -49,7 +49,8 @@ export default function App() {
   const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
   const [libraryDragKind, setLibraryDragKind] = useState<BlockKind | null>(null);
-  const [libraryPreviewBlock, setLibraryPreviewBlock] = useState<Block | null>(null);
+  const libraryDragElementRef = useRef<HTMLElement | null>(null);
+  const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
   const snapGhostContentRef = useRef<HTMLDivElement>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
@@ -488,23 +489,27 @@ export default function App() {
     event.dataTransfer.effectAllowed = payload.source === "library" ? "copy" : "move";
     event.dataTransfer.setData("application/x-blorrl", JSON.stringify(payload));
     if (payload.source === "library") {
-      // Suppress the browser's screenshot-like native drag image; the canvas
-      // ghost is the only preview users should see.
-      const dragImage = document.createElement("div");
-      dragImage.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0";
-      document.body.appendChild(dragImage);
-      event.dataTransfer.setDragImage(dragImage, 0, 0);
-      requestAnimationFrame(() => dragImage.remove());
+      // Move the existing palette block itself; do not create a duplicate preview.
+      const source = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(".library-block-preview");
+      if (source) {
+        libraryDragElementRef.current = source;
+        libraryDragOriginalStyleRef.current = source.getAttribute("style");
+        const rect = source.getBoundingClientRect();
+        Object.assign(source.style, {
+          position: "fixed", left: String(rect.left) + "px", top: String(rect.top) + "px",
+          width: String(rect.width) + "px", margin: "0", zIndex: "1000", opacity: ".58",
+          pointerEvents: "none", transform: "none",
+        });
+        source.classList.add("library-drag-active");
+      }
       libraryDragKindRef.current = payload.kind;
       setLibraryDragKind(payload.kind);
-      const preview = createBlock(payload.kind);
-      setLibraryPreviewBlock({ ...preview, id: "__library_drag_preview__" });
       snapGhostRef.current = null;
       setSnapGhost(null);
     } else {
       libraryDragKindRef.current = null;
       setLibraryDragKind(null);
-      setLibraryPreviewBlock(null);
+      restoreLibraryDragElement();
     }
     if (payload.source === "canvas") {
       const nestedReporter = !!(event.target as HTMLElement).closest(".value-chip");
@@ -549,11 +554,27 @@ export default function App() {
     setPositions(next);
     setStatus("idle");
   }
+  function restoreLibraryDragElement() {
+    const element = libraryDragElementRef.current;
+    if (element) {
+      element.classList.remove("library-drag-active");
+      const originalStyle = libraryDragOriginalStyleRef.current;
+      if (originalStyle === null) element.removeAttribute("style");
+      else element.setAttribute("style", originalStyle);
+    }
+    libraryDragElementRef.current = null;
+    libraryDragOriginalStyleRef.current = null;
+  }
   function handleLibraryDragOver(event: DragEvent<HTMLElement>) {
     const kind = libraryDragKindRef.current;
     if (!kind || !event.dataTransfer.types.includes("application/x-blorrl")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
+    const source = libraryDragElementRef.current;
+    if (source) {
+      source.style.left = String(event.clientX - 12) + "px";
+      source.style.top = String(event.clientY - 18) + "px";
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const canvasRect = canvas.getBoundingClientRect();
@@ -630,7 +651,7 @@ export default function App() {
   function onLibraryDragEnd() {
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
-    setLibraryPreviewBlock(null);
+    restoreLibraryDragElement();
     snapGhostRef.current = null;
     setSnapGhost(null);
   }
@@ -642,7 +663,7 @@ export default function App() {
     const resolvedTargetId = ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId;
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
-    setLibraryPreviewBlock(null);
+    restoreLibraryDragElement();
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
     try {
       const payload=JSON.parse(raw) as DragPayload;
@@ -790,7 +811,7 @@ export default function App() {
           <div className="flow-stem"><span/></div>
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {(libraryPreviewBlock && snapGhost ? [...blocks, libraryPreviewBlock] : blocks).map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={block.id === "__library_drag_preview__" && snapGhost ? {left:snapGhost.x,top:snapGhost.y,zIndex:20,touchAction:"none",pointerEvents:"none"} : {left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "") + (block.id === "__library_drag_preview__" ? " library-drag-preview" + (snapGhost && snapGhost.targetId !== "__free__" ? " library-drag-snapping" : "") : "") + (dragPreview && snapGhost && dragPreview.ids.includes(block.id) ? " ghost-source-hidden" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (selected.includes(block.id) ? " selected" : "") +  + (dragPreview && snapGhost && dragPreview.ids.includes(block.id) ? " ghost-source-hidden" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
