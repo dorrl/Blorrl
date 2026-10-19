@@ -328,18 +328,35 @@ export default function App() {
       const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
 
-      // Use the palette block's DOM as-is: no synthetic value-chip, width
-      // measurement, zoom, or flex/layout overrides. Only make the clone
-      // translucent and non-interactive.
+      // Palette cards have special sizing rules, so cloning one without
+      // removing those rules cannot match a workspace block. Keep the same
+      // block DOM/content, but render it with the canonical canvas-card width
+      // and normal flow positioning inside the ghost container.
       const ghost = source.cloneNode(true) as HTMLElement;
+      ghost.classList.remove("library-block-preview", "selected", "ghost-source-hidden");
       ghost.setAttribute("aria-hidden", "true");
       ghost.setAttribute("inert", "");
+      ghost.removeAttribute("draggable");
+      ghost.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(element => {
+        element.removeAttribute("data-block-id");
+        element.removeAttribute("data-drop-into");
+      });
       ghost.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => {
         element.setAttribute("disabled", "");
         element.setAttribute("tabindex", "-1");
       });
-      ghost.style.opacity = "0.55";
-      ghost.style.pointerEvents = "none";
+      Object.assign(ghost.style, {
+        position: "relative",
+        left: "auto",
+        top: "auto",
+        width: "330px",
+        maxWidth: "none",
+        minWidth: "0",
+        margin: "0",
+        opacity: "0.55",
+        pointerEvents: "none",
+        boxSizing: "border-box"
+      });
       container.appendChild(ghost);
       return;
     }
