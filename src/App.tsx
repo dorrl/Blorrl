@@ -542,7 +542,7 @@ export default function App() {
         const rect = source.getBoundingClientRect();
         Object.assign(source.style, {
           position: "fixed", left: String(rect.left) + "px", top: String(rect.top) + "px",
-          width: String(rect.width) + "px", margin: "0", zIndex: "1000", opacity: ".58",
+          width: "330px", minHeight: "88px", maxWidth: "none", margin: "0", zIndex: "1000", opacity: ".58",
           pointerEvents: "none", transform: "none",
         });
         source.classList.add("library-drag-active");
