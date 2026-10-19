@@ -593,7 +593,7 @@ export default function App() {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
         .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; return inside ? {id:`__value__:${slot.dataset.valueFor}:${slot.dataset.valueField}`,x:rect.left-canvasRect.left+canvas.scrollLeft,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2,area:rect.width*rect.height} : null; })
         .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
-      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; positionOriginalAt(ghost.x, ghost.y); if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; positionOriginalAt(ghost.x, ghost.y - (source?.offsetHeight ?? 0) / 2); if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
     if (isConditionReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
