@@ -31,7 +31,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
-  const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
+const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({ init1: { "x": 42, "y": 90 }, init2: { x: 42, y: 130 }});
   const [workspaceRatio, setWorkspaceRatio] = useState(68);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window === "undefined") return 220;

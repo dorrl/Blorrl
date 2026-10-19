@@ -1,7 +1,6 @@
 import type { Block } from "../language";
 
 export const initialBlocks: Block[] = [
-  { id: "b1", kind: "print", value: "Hello from Blorrl!", attachedTo: "__start" },
-  { id: "b2", kind: "let", name: "answer", value: "42", types: ["number"], attachedTo: "b1" },
-  { id: "b3", kind: "print", value: "", valueBlock: { id: "b3-value", kind: "get", value: "answer" }, attachedTo: "b2" },
+  { id: "init1", kind: "let", name: "var", value: "Hello World", types: ["string"], attachedTo: "__start" },
+  { id: "init2", kind: "print", value: "", valueBlock: { id: "init3", kind: "get", value: "var" }, attachedTo: "init1" },
 ];
