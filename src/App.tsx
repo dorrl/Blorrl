@@ -157,7 +157,7 @@ export default function App() {
             horizontal: pointerX >= rect.left - 6 && pointerX <= rect.right + 6
           } : null;
         })
-        .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 18 && item.horizontal)
+        .filter((item): item is { id: string; x: number; y: number; distance: number; horizontal: boolean } => item !== null && item.distance < 20 && item.horizontal)
         .sort((a, b) => a.distance - b.distance)[0];
 
       const startNode = canvas.querySelector<HTMLElement>(".start-node");
@@ -180,7 +180,7 @@ export default function App() {
           const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
           return inside ? {id:"__condition__:"+slot.dataset.conditionFor, x:rect.left-canvasRect.left+canvas.scrollLeft, y:rect.top-canvasRect.top+canvas.scrollTop, distance:0, horizontal:true} : null;
         }).find(item => item !== null) ?? null : null;
-      const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 18 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
+      const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 20 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
         : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
