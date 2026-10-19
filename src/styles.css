@@ -2149,7 +2149,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .catalog-item:hover .library-block-preview { filter:brightness(1.12); }
 
 
-/* Palette cards use the same unscaled dimensions and component layout as canvas cards. */
+/* Palette items stay compact in the sidebar; the dragged original is sized from its own rendered bounds. */
 .catalog-item {
   display: block;
   position: relative;
@@ -2163,6 +2163,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   background: transparent;
   text-align: left;
   cursor: grab;
+  -webkit-user-drag: element;
 }
 .catalog-item:hover {
   background: #2a2d35;
@@ -2173,10 +2174,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   position: relative;
   left: auto;
   top: auto;
-  /* Match the actual canvas block's dimensions while it is being dragged. */
-  width: 330px;
-  min-height: 88px;
-  max-width: none;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
   box-sizing: border-box;
   pointer-events: none;
