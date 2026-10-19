@@ -325,13 +325,12 @@ export default function App() {
     if (!snapGhost || !canvasRef.current) return;
 
     if (libraryDragKind) {
-      const source = document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
+      // Prefer the workspace-rendered block structure when this kind already
+      // exists on the canvas; fall back to the palette template for first use.
+      const source = canvasRef.current.querySelector<HTMLElement>(`.block-card.kind-${libraryDragKind}`)
+        ?? document.querySelector<HTMLElement>(`.library-block-preview.kind-${libraryDragKind}`);
       if (!source) return;
 
-      // Show the palette block at full opacity and let the normal block-card
-      // CSS determine its geometry. Do not impose a ghost-specific width,
-      // max-width, zoom, or opacity: those overrides made it differ from a
-      // block after it had been dropped onto the canvas.
       const ghost = source.cloneNode(true) as HTMLElement;
       ghost.classList.remove("library-block-preview", "selected", "ghost-source-hidden");
       ghost.setAttribute("aria-hidden", "true");
@@ -617,7 +616,7 @@ export default function App() {
     if (start) {
       const rect = start.getBoundingClientRect();
       const distance = Math.abs(event.clientY - rect.bottom);
-      if (event.clientX >= rect.left - 18 && event.clientX <= rect.right + 18 && distance < 34)
+      if (event.clientX >= rect.left - 10 && event.clientX <= rect.right + 10 && distance < 16)
         candidates.push({id:"__start",x:start.offsetLeft,y:start.offsetTop+start.offsetHeight-1,distance});
     }
     Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).filter(element => element.parentElement === canvas).forEach(element => {
@@ -628,8 +627,7 @@ export default function App() {
         if (id) candidates.push({id,x:element.offsetLeft,y:element.offsetTop+element.offsetHeight-1,distance});
       }
     });
-    // When the pointer is below the current flow, offer an append target even
-    // if it is no longer close enough to a block's bottom edge.
+    // When the pointer is below the current flow, allow appending only near the final block.
     if (!candidates.length) {
       const canvasRect = canvas.getBoundingClientRect();
       if (event.clientX >= canvasRect.left + 8 && event.clientX <= canvasRect.right - 8) {
@@ -639,7 +637,7 @@ export default function App() {
           ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${last.id}"]`)
           : null;
         const fallback = lastElement ?? start;
-        if (fallback && event.clientY >= fallback.getBoundingClientRect().bottom - 2) {
+        if (fallback && event.clientY >= fallback.getBoundingClientRect().bottom - 2 && event.clientY <= fallback.getBoundingClientRect().bottom + 18) {
           candidates.push({
             id: lastElement?.dataset.blockId ?? "__start",
             x: fallback.offsetLeft,
