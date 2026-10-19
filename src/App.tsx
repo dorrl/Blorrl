@@ -136,7 +136,6 @@ export default function App() {
       if (Math.hypot(dx, dy) > 3) blockDragMoved.current = true;
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
-      drag.ids.forEach(id => { const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.willChange = "transform"; element.style.transform = `translate(${dx}px, ${dy}px)`; } });
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
       const movingOrigin = drag.origins[drag.ids[0] ?? ""];
@@ -187,6 +186,27 @@ export default function App() {
         ? startCandidate
         : candidate);
       const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
+      // While a valid connection is predicted, temporarily pin the dragged
+      // original block(s) to the predicted final layout and fade them slightly.
+      // No placeholder or cloned preview element is created.
+      drag.ids.forEach((id, index) => {
+        const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
+        if (!element) return;
+        element.style.willChange = "transform, opacity";
+        if (ghost) {
+          const origin = drag.origins[id] ?? {x: element.offsetLeft, y: element.offsetTop};
+          let predictedY = ghost.y;
+          if (index > 0) {
+            predictedY += drag.ids.slice(0, index).reduce((height, previousId) =>
+              height + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${previousId}"]`)?.offsetHeight ?? 38) - 1, 0);
+          }
+          element.style.transform = `translate(${ghost.x - origin.x}px, ${predictedY - origin.y}px)`;
+          element.style.opacity = "0.62";
+        } else {
+          element.style.transform = `translate(${dx}px, ${dy}px)`;
+          element.style.opacity = "";
+        }
+      });
       const previousGhost = snapGhostRef.current;
       if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
       snapGhostRef.current = ghost;
@@ -198,7 +218,7 @@ export default function App() {
       if (!drag || event.pointerId !== drag.pointerId) return;
       blockPointerDrag.current = null;
       const canvas = canvasRef.current;
-      drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.willChange = ""; } });
+      drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
       const dx = event.clientX - drag.startX;
