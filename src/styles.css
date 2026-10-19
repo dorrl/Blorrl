@@ -2173,7 +2173,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   position: relative;
   left: auto;
   top: auto;
-  /* The sidebar scrolls; it never constrains a block's intrinsic layout. */
+  /* Match the actual canvas block's dimensions while it is being dragged. */
+  width: 330px;
+  min-height: 88px;
   max-width: none;
   margin: 0;
   box-sizing: border-box;
