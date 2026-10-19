@@ -870,7 +870,7 @@ export default function App() {
                 {(block.kind === "if" || block.kind === "repeat") && <ControlBlockBody block={block} selected={selected} onDrop={onDrop} onSelectBlock={(event, id) => selectBlock(event as unknown as MouseEvent, id)} onDragStart={(event, ids) => onDragStart(event, {source:"canvas", ids})} onBlockDragEnd={onBlockDragEnd} updateBlock={updateBlock} updateBranch={updateBranch} addElseIf={addElseIf} toggleElse={toggleElse} />}
               </div>
             </article>)}
-          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (libraryDragKind ? " library-drag-preview" : "") + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
+          {snapGhost && <div ref={snapGhostContentRef} className={"snap-ghost snap-ghost-stack" + (libraryDragKind ? " library-drag-preview" : "") + (libraryDragKind && snapGhost.targetId !== "__free__" ? " library-drag-snapping" : "") + (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:") ? " value-snap-ghost" : "")} style={{left:snapGhost.x,top:snapGhost.y}} aria-hidden="true" />}
           <div className="connector last-connector"><span/></div><button className="add-inline" onClick={()=>addBlock("print")}><Plus size={14}/> Add block to flow</button>
           
         </div>
