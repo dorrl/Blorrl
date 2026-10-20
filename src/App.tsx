@@ -62,12 +62,58 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const sidebarResizeOrigin = useRef<{x:number;width:number}|null>(null);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
+  const blockHeightsRef = useRef(new Map<string, number>());
   const canvasRef = useRef<HTMLDivElement>(null);
   const { startCanvasGesture, moveCanvasGesture, endCanvasGesture } = useCanvasPan(canvasRef, spaceDown);
   const executableBlocks = useMemo(() => getStartAttachedBlocks(blocks), [blocks]);
   const compiled = useMemo(() => compile(executableBlocks), [executableBlocks]);
   const assemblyCompiled = useMemo(() => compileAssembly(executableBlocks), [executableBlocks]);
   const totalBlocks = allBlocks(blocks).length;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => {
+      if (blockPointerDrag.current || libraryDragKindRef.current) return;
+      const shifts: Array<{id: string; top: number; delta: number}> = [];
+      for (const entry of entries) {
+        const element = entry.target as HTMLElement;
+        const id = element.dataset.blockId;
+        if (!id) continue;
+        const height = entry.borderBoxSize && entry.borderBoxSize.length
+          ? entry.borderBoxSize[0]!.blockSize
+          : element.getBoundingClientRect().height;
+        const previous = blockHeightsRef.current.get(id);
+        blockHeightsRef.current.set(id, height);
+        if (previous !== undefined && Math.abs(height - previous) > 1) {
+          shifts.push({id, top: element.offsetTop + previous - 8, delta: height - previous});
+        }
+      }
+      if (!shifts.length) return;
+      setPositions(current => {
+        const next = {...current};
+        for (const shift of shifts) {
+          for (const block of blocks) {
+            if (block.id === shift.id) continue;
+            const point = next[block.id] ?? positionsRef.current[block.id];
+            if (point && point.y >= shift.top) {
+              next[block.id] = {...point, y: Math.max(64, point.y + shift.delta)};
+            }
+          }
+        }
+        positionsRef.current = next;
+        return next;
+      });
+    });
+    canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]").forEach(element => {
+      const id = element.dataset.blockId;
+      if (id && !blockHeightsRef.current.has(id)) {
+        blockHeightsRef.current.set(id, element.getBoundingClientRect().height);
+      }
+      observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [blocks]);
 
   useEffect(() => {
     try {
