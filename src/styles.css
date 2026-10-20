@@ -2320,3 +2320,82 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   box-sizing: border-box;
 }
 
+/* Value reporters use one explicit visual model in the canvas and palette.
+   Focus/selection only adds an outline; it must never switch their silhouette. */
+.block-card.value-block-model {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0;
+  gap: 0;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 10px 4px 4px 10px;
+  box-shadow: none;
+  overflow: visible;
+  transition: none;
+}
+
+.block-card.value-block-model::before,
+.block-card.value-block-model::after {
+  display: none !important;
+  content: none !important;
+}
+
+.block-card.value-block-model .block-content {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  padding: 0 7px;
+  gap: 0;
+  box-sizing: border-box;
+}
+
+.block-card.value-block-model .block-fields {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: nowrap;
+  width: max-content;
+  min-width: 0;
+  height: 100%;
+  gap: 0;
+}
+
+.block-card.value-block-model .inline-get,
+.block-card.value-block-model .inline-reporter {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  min-height: 0;
+  white-space: nowrap;
+}
+
+.block-card.value-block-model .inline-get input {
+  flex: 0 0 70px;
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+  height: 18px;
+  padding: 0;
+  box-sizing: border-box;
+  outline-offset: 1px;
+}
+
+.block-card.value-block-model.selected,
+.block-card.value-block-model:focus,
+.block-card.value-block-model:focus-within {
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  box-shadow: none;
+}
+
