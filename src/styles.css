@@ -2111,9 +2111,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 }
 
 
-/* Hide the real dragged blocks only while their snap ghost is visible. */
+/* Keep the source visible during direct dragging; it is the snap preview. */
 .block-card.ghost-source-hidden {
-  opacity: 0 !important;
+  opacity: .62 !important;
   pointer-events: none;
 }
 
@@ -2397,5 +2397,40 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   min-height: 30px;
   max-height: 30px;
   box-shadow: none;
+}
+
+
+
+/* Keep the real dragged block visible: it is also the snap preview. */
+.block-card.ghost-source-hidden {
+  opacity: .62 !important;
+}
+
+/* Statement blocks expand with their parameters instead of clipping at 330px. */
+.block-card.kind-let,
+.block-card.kind-input {
+  width: max-content;
+  min-width: 330px;
+  max-width: min(760px, calc(100vw - 360px));
+}
+
+.block-card.kind-let > .block-content,
+.block-card.kind-input > .block-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.block-card.kind-let .block-fields,
+.block-card.kind-input .block-fields {
+  width: max-content;
+  max-width: 100%;
+  flex-wrap: nowrap;
+}
+
+.block-card.kind-let .block-fields > input {
+  flex: 0 1 180px;
+  width: 180px;
+  min-width: 80px;
+  max-width: 260px;
 }
 
