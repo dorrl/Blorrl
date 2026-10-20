@@ -2434,3 +2434,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   max-width: 260px;
 }
 
+/* Calculate block operands should keep the light text color on dark inputs. */
+.inline-reporter.kind-add .value-input,
+.inline-reporter.kind-add .value-slot input,
+.block-card.kind-add .value-input,
+.block-card.kind-add .value-slot input {
+  color: #e5e8ee;
+  caret-color: #e5e8ee;
+}
+
