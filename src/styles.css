@@ -2190,3 +2190,93 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   outline: 1px solid #8cc8ff;
   outline-offset: 2px;
 }
+
+/* Value reporters keep the same compact silhouette when standalone and nested. */
+.block-card.kind-get,
+.block-card.kind-true,
+.block-card.kind-false,
+.block-card.kind-add,
+.block-card.kind-compare {
+  width: max-content;
+  min-width: 0;
+  max-width: min(520px, calc(100% - 24px));
+  min-height: 0;
+  height: auto;
+  align-items: center;
+  padding: 0;
+  border-radius: 10px 4px 4px 10px;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.block-card.kind-get::before,
+.block-card.kind-get::after,
+.block-card.kind-true::before,
+.block-card.kind-true::after,
+.block-card.kind-false::before,
+.block-card.kind-false::after,
+.block-card.kind-add::before,
+.block-card.kind-add::after,
+.block-card.kind-compare::before,
+.block-card.kind-compare::after {
+  display: none;
+}
+
+.block-card.kind-get .block-gutter,
+.block-card.kind-true .block-gutter,
+.block-card.kind-false .block-gutter,
+.block-card.kind-add .block-gutter,
+.block-card.kind-compare .block-gutter,
+.block-card.kind-get .block-type,
+.block-card.kind-true .block-type,
+.block-card.kind-false .block-type,
+.block-card.kind-add .block-type,
+.block-card.kind-compare .block-type {
+  display: none;
+}
+
+.block-card.kind-get .block-content,
+.block-card.kind-true .block-content,
+.block-card.kind-false .block-content,
+.block-card.kind-add .block-content,
+.block-card.kind-compare .block-content {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 3px 7px;
+  align-items: center;
+  gap: 0;
+}
+
+.block-card.kind-get .block-fields,
+.block-card.kind-true .block-fields,
+.block-card.kind-false .block-fields,
+.block-card.kind-add .block-fields,
+.block-card.kind-compare .block-fields {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.block-card.kind-get.category-values { background: #7650b5 !important; border-color: #c1a4ee !important; color: #fff !important; }
+.block-card.kind-true.category-values { background: #27885b !important; border-color: #72d5a0 !important; color: #fff !important; }
+.block-card.kind-false.category-values { background: #9b454b !important; border-color: #ee9aa0 !important; color: #fff !important; }
+.block-card.kind-add.category-values { background: #d89b2b !important; border-color: #f4c76d !important; color: #241909 !important; }
+.block-card.kind-compare.category-values { background: #7755aa !important; border-color: #c5a6f5 !important; color: #fff !important; }
+
+.block-card.kind-add .block-content,
+.block-card.kind-compare .block-content {
+  color: inherit;
+}
+
+/* Selection and keyboard focus must not change a block's geometry. */
+.block-card.selected,
+.block-card:focus,
+.block-card:focus-within {
+  outline-offset: 2px;
+}
+
