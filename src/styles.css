@@ -2443,3 +2443,46 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   caret-color: #e5e8ee;
 }
 
+/* Nested value reporters determine the width of their parent expression. */
+.block-card:not(.value-block-model) .block-content {
+  min-width: max-content;
+  max-width: none;
+}
+
+.block-card:not(.value-block-model) .block-fields {
+  width: max-content;
+  max-width: none;
+  flex-wrap: nowrap;
+}
+
+.block-card .value-slot {
+  width: max-content;
+  min-width: 44px;
+  max-width: none;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.block-card .value-slot > .value-chip {
+  width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.block-card .inline-reporter .value-slot {
+  width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+/* Let expression width grow with each nested operand instead of clipping it. */
+.block-card.kind-add,
+.block-card.kind-compare,
+.block-card.kind-let,
+.block-card.kind-print,
+.block-card.kind-if,
+.block-card.kind-repeat {
+  width: max-content;
+  max-width: min(760px, calc(100% - 24px));
+}
+
