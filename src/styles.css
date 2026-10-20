@@ -2280,3 +2280,43 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* Give every value reporter the same outer height in the canvas and value slots. */
+.block-card.kind-get,
+.block-card.kind-true,
+.block-card.kind-false,
+.block-card.kind-add,
+.block-card.kind-compare {
+  height: 30px;
+  min-height: 30px;
+  box-sizing: border-box;
+}
+
+.value-slot > .value-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  line-height: normal;
+}
+
+.value-slot > .value-chip > .inline-reporter {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  min-height: 0;
+}
+
+.value-slot > .value-chip > .inline-reporter .value-slot {
+  min-height: 22px;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+.value-slot > .value-chip > .inline-reporter select {
+  height: 22px;
+  box-sizing: border-box;
+}
+
