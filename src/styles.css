@@ -2490,3 +2490,26 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   width: max-content;
   max-width: none;
 }
+
+
+/* Connection preview is a separate, non-interactive layer. The real source
+   remains under the pointer while this layer shows the predicted snap point. */
+.snap-ghost-preview {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  pointer-events: none;
+  opacity: 0.68;
+  filter: saturate(0.82);
+  contain: layout style;
+}
+.snap-ghost-preview > .block-card {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 0 2px rgba(140, 200, 255, 0.8), 0 6px 18px rgba(0, 0, 0, 0.22);
+}
