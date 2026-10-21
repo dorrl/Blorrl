@@ -663,6 +663,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const source = libraryDragElementRef.current;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Clear the previous insertion preview before evaluating the new magnet.
+    insertionPreviewElementsRef.current.forEach(element => {
+      element.style.transform = "";
+      element.style.willChange = "";
+    });
+    insertionPreviewElementsRef.current = [];
     const canvasRect = canvas.getBoundingClientRect();
     // Position the original palette element at the predicted post-drop location.
     // snapGhost remains target metadata only; no extra preview element is rendered.
@@ -739,11 +745,34 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const nearest = candidates.sort((a,b)=>a.distance-b.distance)[0];
     const nextGhost = nearest ? {x:nearest.x,y:nearest.y,count:1,targetId:"__insert__:"+nearest.id} : freeGhost();
     positionOriginalAt(nextGhost.x, nextGhost.y);
+    if (nextGhost.targetId.startsWith("__insert__:")) {
+      const targetId = nextGhost.targetId.slice("__insert__:".length);
+      const targetElement = targetId === "__start"
+        ? start
+        : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${targetId}"]`);
+      const insertedHeight = (source?.getBoundingClientRect().height ?? 38) - 1;
+      const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : nextGhost.y;
+      Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
+        const id = element.dataset.blockId;
+        if (!id || id === targetId) return;
+        const origin = positionsRef.current[id] ?? {x: element.offsetLeft, y: element.offsetTop};
+        if (origin.y >= targetBottom) {
+          element.style.willChange = "transform";
+          element.style.transform = `translate(0px, ${insertedHeight}px)`;
+          insertionPreviewElementsRef.current.push(element);
+        }
+      });
+    }
     const previous = snapGhostRef.current;
-    if (!nextGhost || !previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
+    if (!previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
     snapGhostRef.current = nextGhost;
   }
   function onLibraryDragEnd() {
+    insertionPreviewElementsRef.current.forEach(element => {
+      element.style.transform = "";
+      element.style.willChange = "";
+    });
+    insertionPreviewElementsRef.current = [];
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     restoreLibraryDragElement();
