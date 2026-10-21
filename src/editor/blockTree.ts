@@ -62,7 +62,6 @@ export function normalizeBlockGraph(items: Block[]): Block[] {
 /** Build a temporary nested view for the existing compiler and block fields. */
 export function hydrateBlockGraph(items: Block[]): Block[] {
   const flat = allBlocks(items);
-  const byId = new Map(flat.map(block => [block.id, block]));
   const visiting = new Set<string>();
   const hydrated = new Map<string, Block>();
   const hydrate = (source: Block): Block => {
