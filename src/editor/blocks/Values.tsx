@@ -17,6 +17,7 @@ type ValueSlotProps = {
   onDrop: (event: DragEvent, targetId?: string) => void;
   onDragStart: (event: DragEvent, id: string) => void;
   renderValueSlot: ValueSlotRenderer;
+  nestedBlock?: Block;
 };
 
 /** Shared input/drop target used by block values and expression reporters. */
@@ -29,8 +30,9 @@ export function ValueSlot({
   onDrop,
   onDragStart,
   renderValueSlot,
+  nestedBlock,
 }: ValueSlotProps) {
-  const nested = field === "valueBlock" ? owner.valueBlock : owner.rightBlock;
+  const nested = nestedBlock ?? (field === "valueBlock" ? owner.valueBlock : owner.rightBlock);
 
   return (
     <div
