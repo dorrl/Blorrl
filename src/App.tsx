@@ -201,7 +201,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       insertionPreviewElementsRef.current = [];
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
-      const movingOrigin = drag.origins[drag.ids[0] ?? ""];
+
       const canvasRect = canvas.getBoundingClientRect();
       // Snap hit-testing follows the pointer itself, not the dragged block's bounds.
       const pointerX = event.clientX;
@@ -253,9 +253,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       if (ghost && !ghost.targetId.startsWith("__value__:") && !ghost.targetId.startsWith("__condition__:")) {
         const insertedHeight = drag.ids.reduce((total, id) =>
           total + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
-        const targetElement = ghost.targetId === "__start"
-          ? canvas.querySelector<HTMLElement>(".start-node")
-          : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
         const successorIds = new Set(getAttachedSuccessorIds(
           blocksRef.current,
           ghost.targetId === "__start" ? "__start" : ghost.targetId,
@@ -349,9 +346,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         });
         const insertedHeight = drag.ids.reduce((total, id) =>
           total + (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1, 0);
-        const targetElement = ghost.targetId === "__start"
-          ? canvas?.querySelector<HTMLElement>(".start-node")
-          : canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
         const successorIds = new Set(getAttachedSuccessorIds(
           blocksRef.current,
           ghost.targetId === "__start" ? "__start" : ghost.targetId,
@@ -469,7 +463,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     setPositions(current => {
       const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
       if (beforeId && targetPosition) {
-        const targetHeight = targetElement?.offsetHeight ?? 88;
         const successorIds = new Set(getAttachedSuccessorIds(blocks, beforeId));
         blocks.forEach((item,index) => {
           if (!successorIds.has(item.id)) return;
@@ -766,9 +759,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     positionOriginalAt(nextGhost.x, nextGhost.y);
     if (nextGhost.targetId.startsWith("__insert__:")) {
       const targetId = nextGhost.targetId.slice("__insert__:".length);
-      const targetElement = targetId === "__start"
-        ? start
-        : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${targetId}"]`);
       const insertedHeight = (source?.getBoundingClientRect().height ?? 38) - 1;
       const successorIds = new Set(getAttachedSuccessorIds(blocksRef.current, targetId));
       Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
