@@ -26,9 +26,7 @@ export const allBlocks = (items: Block[]): Block[] => {
 export function normalizeBlockGraph(items: Block[]): Block[] {
   const result: Block[] = [];
   const seen = new Set<string>();
-  const visit = (block: Block, inheritedParent?: string, inheritedField?: Block["attachmentField"]) => {
-    if (seen.has(block.id)) return;
-    seen.add(block.id);
+  const visit = (block: Block, asRoot: boolean, inheritedParent?: string, inheritedField?: Block["attachmentField"]): Block => {
     const copy: Block = { ...block };
     const socketChildren: Array<{ child: Block; field: NonNullable<Block["attachmentField"]> }> = [];
     if (copy.valueBlock) socketChildren.push({ child: copy.valueBlock, field: "valueBlock" });
@@ -42,14 +40,22 @@ export function normalizeBlockGraph(items: Block[]): Block[] {
       copy.attachmentField = inheritedField;
       copy.attachmentType = inheritedField === "conditionBlock" ? "condition" : "value";
     }
-    result.push(copy);
-    for (const socket of socketChildren) visit(socket.child, copy.id, socket.field);
-    copy.children = copy.children?.map(child => child);
-    for (const child of copy.children ?? []) visit(child);
-    for (const branch of copy.elseIf ?? []) for (const child of branch.children) visit(child);
-    for (const child of copy.elseChildren ?? []) visit(child);
+    if (asRoot && !seen.has(copy.id)) {
+      seen.add(copy.id);
+      result.push(copy);
+    }
+    for (const socket of socketChildren) {
+      if (!seen.has(socket.child.id)) {
+        const child = visit(socket.child, true, copy.id, socket.field);
+        seen.add(child.id);
+      }
+    }
+    copy.children = copy.children?.map(child => visit(child, false));
+    copy.elseIf = copy.elseIf?.map(branch => ({ ...branch, children: branch.children.map(child => visit(child, false)) }));
+    copy.elseChildren = copy.elseChildren?.map(child => visit(child, false));
+    return copy;
   };
-  for (const block of items) visit(block);
+  for (const block of items) visit(block, true);
   return result;
 }
 
@@ -138,5 +144,6 @@ export function getStartAttachedBlocks(items: Block[]): Block[] {
     used.add(next.id);
     parentId = next.id;
   }
-  return hydrateBlockGraph(ordered);
+  const hydrated = new Map(hydrateBlockGraph(items).map(block => [block.id, block]));
+  return ordered.map(block => hydrated.get(block.id) ?? block);
 }
