@@ -48,6 +48,15 @@ export function normalizeBlockGraph(items: Block[]): Block[] {
       if (!seen.has(socket.child.id)) {
         const child = visit(socket.child, true, copy.id, socket.field);
         seen.add(child.id);
+      } else {
+        // A socket child may already have appeared earlier in the serialized array.
+        // Update that same canonical object instead of leaving it as a loose block.
+        const existing = result.find(item => item.id === socket.child.id);
+        if (existing) {
+          existing.attachedTo = copy.id;
+          existing.attachmentField = socket.field;
+          existing.attachmentType = socket.field === "conditionBlock" ? "condition" : "value";
+        }
       }
     }
     copy.children = copy.children?.map(child => visit(child, false));
