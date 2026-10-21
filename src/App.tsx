@@ -21,6 +21,21 @@ type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids
 type SnapGhost = { x: number; y: number; count: number; targetId: string };
 function categoryClass(kind: BlockKind) { return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase(); }
 
+/** EntryJS-style stack connection: only the actual successor thread moves on insertion. */
+function getAttachedSuccessorIds(items: Block[], parentId: string): string[] {
+  const result: string[] = [];
+  const visited = new Set<string>();
+  let currentParent = parentId;
+  while (true) {
+    const next = items.find(block => block.attachedTo === currentParent && !visited.has(block.id));
+    if (!next) break;
+    result.push(next.id);
+    visited.add(next.id);
+    currentParent = next.id;
+  }
+  return result;
+}
+
 export default function App() {
   const [blocks, setBlocks] = useState(initialBlocks);
   const [stdin, setStdin] = useState("");
@@ -62,6 +77,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const sidebarResizeOrigin = useRef<{x:number;width:number}|null>(null);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
   const blockHeightsRef = useRef(new Map<string, number>());
   const canvasRef = useRef<HTMLDivElement>(null);
   const { startCanvasGesture, moveCanvasGesture, endCanvasGesture } = useCanvasPan(canvasRef, spaceDown);
@@ -239,16 +256,16 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         const targetElement = ghost.targetId === "__start"
           ? canvas.querySelector<HTMLElement>(".start-node")
           : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
-        const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : ghost.y;
+        const successorIds = new Set(getAttachedSuccessorIds(
+          blocksRef.current,
+          ghost.targetId === "__start" ? "__start" : ghost.targetId,
+        ));
         Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
           const id = element.dataset.blockId;
-          if (!id || drag.ids.includes(id) || id === ghost.targetId) return;
-          const origin = positionsRef.current[id] ?? {x: element.offsetLeft, y: element.offsetTop};
-          if (origin.y >= targetBottom) {
-            element.style.willChange = "transform";
-            element.style.transform = `translate(0px, ${insertedHeight}px)`;
-            insertionPreviewElementsRef.current.push(element);
-          }
+          if (!id || drag.ids.includes(id) || !successorIds.has(id)) return;
+          element.style.willChange = "transform";
+          element.style.transform = `translate(0px, ${insertedHeight}px)`;
+          insertionPreviewElementsRef.current.push(element);
         });
       }
       // While a valid connection is predicted, temporarily pin the dragged
@@ -327,7 +344,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         });
         // Materialize fallback layout positions before shifting, otherwise blocks
         // without an explicit entry in positions keep their old index-based location.
-        blocks.forEach((block, index) => {
+        blocksRef.current.forEach((block, index) => {
           if (!next[block.id]) next[block.id] = positionsRef.current[block.id] ?? {x:42,y:90 + index * 86};
         });
         const insertedHeight = drag.ids.reduce((total, id) =>
@@ -335,11 +352,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         const targetElement = ghost.targetId === "__start"
           ? canvas?.querySelector<HTMLElement>(".start-node")
           : canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${ghost.targetId}"]`);
-        const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : ghost.y;
-        // Make physical room too; attachment changes alone leave the old successor
-        // occupying the same pixels as the newly inserted block.
+        const successorIds = new Set(getAttachedSuccessorIds(
+          blocksRef.current,
+          ghost.targetId === "__start" ? "__start" : ghost.targetId,
+        ));
+        // Make room for the inserted thread without moving unrelated floating blocks.
         Object.entries(next).forEach(([id, point]) => {
-          if (!drag.ids.includes(id) && id !== ghost.targetId && point.y >= targetBottom) {
+          if (!drag.ids.includes(id) && successorIds.has(id)) {
             next[id] = { ...point, y: point.y + insertedHeight };
           }
         });
@@ -451,11 +470,11 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
       if (beforeId && targetPosition) {
         const targetHeight = targetElement?.offsetHeight ?? 88;
-        const shiftFrom = targetPosition.y + targetHeight - 10;
+        const successorIds = new Set(getAttachedSuccessorIds(blocks, beforeId));
         blocks.forEach((item,index) => {
-          if (item.id === beforeId) return;
+          if (!successorIds.has(item.id)) return;
           const point = current[item.id] ?? {x:42,y:90 + index * 86};
-          next[item.id] = point.y >= shiftFrom ? {x:point.x,y:point.y+blockHeight-1} : point;
+          next[item.id] = {x:point.x,y:point.y+blockHeight-1};
         });
       }
       return next;
@@ -751,16 +770,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         ? start
         : canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${targetId}"]`);
       const insertedHeight = (source?.getBoundingClientRect().height ?? 38) - 1;
-      const targetBottom = targetElement ? targetElement.offsetTop + targetElement.offsetHeight - 10 : nextGhost.y;
+      const successorIds = new Set(getAttachedSuccessorIds(blocksRef.current, targetId));
       Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).forEach(element => {
         const id = element.dataset.blockId;
-        if (!id || id === targetId) return;
-        const origin = positionsRef.current[id] ?? {x: element.offsetLeft, y: element.offsetTop};
-        if (origin.y >= targetBottom) {
-          element.style.willChange = "transform";
-          element.style.transform = `translate(0px, ${insertedHeight}px)`;
-          insertionPreviewElementsRef.current.push(element);
-        }
+        if (!id || !successorIds.has(id)) return;
+        element.style.willChange = "transform";
+        element.style.transform = `translate(0px, ${insertedHeight}px)`;
+        insertionPreviewElementsRef.current.push(element);
       });
     }
     const previous = snapGhostRef.current;
