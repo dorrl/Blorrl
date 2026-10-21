@@ -6,6 +6,7 @@ type ValueSlotRenderer = (owner: Block, field: "valueBlock" | "rightBlock", valu
 
 type IfConditionFieldProps = {
   block: Block;
+  conditionBlock?: Block;
   updateBlock: (id: string, patch: Partial<Block>) => void;
   renderValueSlot: ValueSlotRenderer;
   onDrop: (event: DragEvent, targetId?: string) => void;
@@ -14,11 +15,12 @@ type IfConditionFieldProps = {
 /** Condition socket UI for an if block. */
 export function IfConditionField({
   block,
+  conditionBlock,
   updateBlock,
   renderValueSlot,
   onDrop,
 }: IfConditionFieldProps) {
-  const condition = block.conditionBlock;
+  const condition = conditionBlock ?? block.conditionBlock;
 
   return (
     <div
