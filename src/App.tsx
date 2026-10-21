@@ -12,7 +12,7 @@ import { ReporterContent, ValueSlot } from "./editor/blocks/Values";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
-import { allBlocks, getStartAttachedBlocks, putCondition, putValue, removeIds } from "./editor/blockTree";
+import { allBlocks, getStartAttachedBlocks, hydrateBlockGraph, normalizeBlockGraph, putCondition, putValue, removeIds } from "./editor/blockTree";
 import { createBlock, updateBlockTree } from "./editor/blockOperations";
 import { useCanvasPan } from "./editor/useCanvasPan";
 
@@ -27,7 +27,7 @@ function getAttachedSuccessorIds(items: Block[], parentId: string): string[] {
   const visited = new Set<string>();
   let currentParent = parentId;
   while (true) {
-    const next = items.find(block => block.attachedTo === currentParent && !visited.has(block.id));
+    const next = items.find(block => block.attachedTo === currentParent && block.attachmentType !== "value" && block.attachmentType !== "condition" && !visited.has(block.id));
     if (!next) break;
     result.push(next.id);
     visited.add(next.id);
@@ -446,6 +446,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const lastAttached = attached[attached.length - 1];
     const block = createBlock(kind);
     block.attachedTo = beforeId === "__start" ? "__start" : beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
+    block.attachmentType = block.attachedTo ? "stack" : undefined;
+    block.attachmentField = undefined;
     const rect = canvasRef.current?.getBoundingClientRect();
     const targetIndex = beforeId && beforeId !== "__start" ? blocks.findIndex(item => item.id === beforeId) : -1;
     const targetPosition = beforeId === "__start" ? {x:42,y:38} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
@@ -491,6 +493,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       <ValueSlot
         owner={owner}
         field={field}
+        nestedBlock={blocks.find(block => block.attachedTo === owner.id && block.attachmentType === "value" && block.attachmentField === field)}
         value={value}
         ariaLabel={ariaLabel}
         updateBlock={updateBlock}
@@ -903,9 +906,9 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) loadedPositions[id] = {x:p.x,y:p.y};
         }
       }
-      const loadedBlocks = project.workspace.blocks as Block[];
+      const loadedBlocks = normalizeBlockGraph(project.workspace.blocks as Block[]);
       const attachments = project.workspace.attachments && typeof project.workspace.attachments === "object" ? project.workspace.attachments as Record<string, string | null> : null;
-      const normalizedBlocks = loadedBlocks.map((block, index) => ({ ...block, attachedTo: attachments ? (attachments[block.id] ?? undefined) : (typeof block.attachedTo === "string" ? block.attachedTo : (index === 0 ? "__start" : loadedBlocks[index - 1]?.id)) }));
+      const normalizedBlocks = loadedBlocks.map((block, index) => ({ ...block, attachedTo: block.attachmentType === "value" || block.attachmentType === "condition" ? block.attachedTo : attachments ? (attachments[block.id] ?? undefined) : (typeof block.attachedTo === "string" ? block.attachedTo : (index === 0 ? "__start" : loadedBlocks[index - 1]?.id)), attachmentType: block.attachmentType ?? (block.attachedTo ? "stack" : undefined) }));
       setBlocks(normalizedBlocks); setPositions(loadedPositions);
       setSelected(normalizedBlocks[0] ? [normalizedBlocks[0].id] : []);
       if (Number.isFinite(project.workspace.workspaceRatio)) setWorkspaceRatio(Math.max(30, Math.min(85, project.workspace.workspaceRatio)));
@@ -947,7 +950,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           />}
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
-          {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (["get","true","false","add","compare"].includes(block.kind) ? " value-block-model" : "") + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
+          {blocks.filter(block => block.attachmentType !== "value" && block.attachmentType !== "condition").map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (["get","true","false","add","compare"].includes(block.kind) ? " value-block-model" : "") + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
             if (spaceDown || e.button !== 0 || (e.target as HTMLElement).closest("input,button,select,textarea,.value-chip")) return;
             e.preventDefault();
             e.stopPropagation();
@@ -995,7 +998,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
                   {block.kind === "get" && <ReporterContent block={block} updateBlock={updateBlock} />}
                   {block.kind === "add" && <Calculate block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
                   {block.kind === "compare" && <Compare block={block} renderValueSlot={renderValueSlot} updateBlock={updateBlock} />}
-                  {block.kind === "if" && <IfConditionField block={block} updateBlock={updateBlock} renderValueSlot={renderValueSlot} onDrop={onDrop} />}
+                  {block.kind === "if" && <IfConditionField block={block} conditionBlock={blocks.find(item => item.attachedTo === block.id && item.attachmentType === "condition" && item.attachmentField === "conditionBlock")} updateBlock={updateBlock} renderValueSlot={renderValueSlot} onDrop={onDrop} />}
                   {block.kind === "repeat" && <RepeatBlock block={block} renderValueSlot={renderValueSlot} />}
                   
                   {(block.kind === "true" || block.kind === "false") && <span className="field-hint">{block.kind === "true" ? "Always true" : "Always false"}</span>}
