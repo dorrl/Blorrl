@@ -21,6 +21,31 @@ type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids
 type SnapGhost = { x: number; y: number; count: number; targetId: string };
 function categoryClass(kind: BlockKind) { return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase(); }
 
+function reflowAttachedStack(items: Block[], current: Record<string, { x: number; y: number }>, canvas: HTMLDivElement | null): Record<string, { x: number; y: number }> {
+  if (!canvas) return current;
+  const next = { ...current };
+  const nodes = items.filter(block => block.attachmentType !== "value" && block.attachmentType !== "condition");
+  const byId = new Map(nodes.map(block => [block.id, block]));
+  const start = canvas.querySelector<HTMLElement>(".start-node");
+  const startPoint = start ? { x: start.offsetLeft, y: start.offsetTop + start.offsetHeight - 1 } : { x: 42, y: 90 };
+  const visited = new Set<string>();
+  const layout = (block: Block): { x: number; y: number } | undefined => {
+    if (visited.has(block.id)) return next[block.id];
+    visited.add(block.id);
+    const parentId = block.attachedTo;
+    if (!parentId || parentId === block.id) return next[block.id];
+    if (parentId === "__start") { next[block.id] = startPoint; return startPoint; }
+    const parent = byId.get(parentId);
+    const parentPoint = parent ? layout(parent) : undefined;
+    if (!parentPoint) return next[block.id];
+    const parentElement = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${parentId}"]`);
+    next[block.id] = { x: parentPoint.x, y: parentPoint.y + Math.max(1, parentElement?.offsetHeight ?? 0) - 1 };
+    return next[block.id];
+  };
+  for (const block of nodes) layout(block);
+  return next;
+}
+
 /** EntryJS-style stack connection: only the actual successor thread moves on insertion. */
 function getAttachedSuccessorIds(items: Block[], parentId: string): string[] {
   const result: string[] = [];
@@ -89,44 +114,30 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(entries => {
+    if (!canvas) return;
+    const recalculate = () => {
       if (blockPointerDrag.current || libraryDragKindRef.current) return;
-      const shifts: Array<{id: string; top: number; delta: number}> = [];
-      for (const entry of entries) {
-        const element = entry.target as HTMLElement;
-        const id = element.dataset.blockId;
-        if (!id) continue;
-        const height = entry.borderBoxSize && entry.borderBoxSize.length
-          ? entry.borderBoxSize[0]!.blockSize
-          : element.getBoundingClientRect().height;
-        const previous = blockHeightsRef.current.get(id);
-        blockHeightsRef.current.set(id, height);
-        if (previous !== undefined && Math.abs(height - previous) > 1) {
-          shifts.push({id, top: element.offsetTop + previous - 8, delta: height - previous});
-        }
-      }
-      if (!shifts.length) return;
       setPositions(current => {
-        const next = {...current};
-        for (const shift of shifts) {
-          for (const block of blocks) {
-            if (block.id === shift.id) continue;
-            const point = next[block.id] ?? positionsRef.current[block.id];
-            if (point && point.y >= shift.top) {
-              next[block.id] = {...point, y: Math.max(64, point.y + shift.delta)};
-            }
-          }
-        }
+        const next = reflowAttachedStack(blocksRef.current, current, canvas);
+        const changed = Object.keys(next).some(id => !current[id] || Math.abs(current[id]!.x-next[id]!.x)>0.5 || Math.abs(current[id]!.y-next[id]!.y)>0.5);
+        if (!changed) return current;
         positionsRef.current = next;
         return next;
       });
+    };
+    recalculate();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const element = entry.target as HTMLElement;
+        const id = element.dataset.blockId;
+        if (id) blockHeightsRef.current.set(id, element.getBoundingClientRect().height);
+      }
+      recalculate();
     });
     canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]").forEach(element => {
       const id = element.dataset.blockId;
-      if (id && !blockHeightsRef.current.has(id)) {
-        blockHeightsRef.current.set(id, element.getBoundingClientRect().height);
-      }
+      if (id) blockHeightsRef.current.set(id, element.getBoundingClientRect().height);
       observer.observe(element);
     });
     return () => observer.disconnect();
@@ -628,6 +639,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     }
   }
   function onBlockDragEnd(event: DragEvent) {
+    // Socket reporter drags are finalized by onDrop; avoid applying the stack detach path twice.
+    if ((event.target as HTMLElement).closest(".value-chip")) return;
     const drag = dragOrigin.current;
     if (!drag) return;
     dragOrigin.current = null;
