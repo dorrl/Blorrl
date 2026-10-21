@@ -512,6 +512,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const rest = movingIds.length ? removeIds(current,movingIds) : current;
       return putCondition(rest,targetId,source);
     });
+    if (movingIds.length) setPositions(current => { const next = {...current}; movingIds.forEach(id => delete next[id]); return next; });
     setSelected([child.id]); setStatus("idle");
   }
   function insertNested(targetId: string, child: Block) {
