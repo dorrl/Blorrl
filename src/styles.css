@@ -2443,46 +2443,50 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   caret-color: #e5e8ee;
 }
 
-/* Nested value reporters determine the width of their parent expression. */
-.block-card:not(.value-block-model) .block-content {
-  min-width: max-content;
-  max-width: none;
-}
-
-.block-card:not(.value-block-model) .block-fields {
-  width: max-content;
-  max-width: none;
-  flex-wrap: nowrap;
-}
-
+/* EntryJS-inspired reporter sizing: only expression sockets grow with their
+   contents. Keep ordinary statement blocks on their own layout rules so a
+   nested reporter cannot force every block in the workspace to expand. */
 .block-card .value-slot {
+  flex: 0 0 auto;
   width: max-content;
   min-width: 44px;
-  max-width: none;
-  flex: 0 0 auto;
+  max-width: 100%;
   overflow: visible;
 }
 
 .block-card .value-slot > .value-chip {
-  width: max-content;
-  max-width: none;
+  display: inline-flex;
   flex: 0 0 auto;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  vertical-align: middle;
 }
 
 .block-card .inline-reporter .value-slot {
+  flex: 0 0 auto;
   width: max-content;
   max-width: none;
-  flex: 0 0 auto;
 }
 
-/* Let expression width grow with each nested operand instead of clipping it. */
 .block-card.kind-add,
-.block-card.kind-compare,
-.block-card.kind-let,
-.block-card.kind-print,
-.block-card.kind-if,
-.block-card.kind-repeat {
+.block-card.kind-compare {
   width: max-content;
-  max-width: min(760px, calc(100% - 24px));
+  min-width: 0;
+  max-width: min(760px, calc(100vw - 360px));
 }
 
+.block-card.kind-add > .block-content,
+.block-card.kind-compare > .block-content {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+}
+
+.block-card.kind-add .block-fields,
+.block-card.kind-compare .block-fields {
+  flex-wrap: nowrap;
+  width: max-content;
+  max-width: none;
+}
