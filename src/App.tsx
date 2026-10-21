@@ -12,7 +12,7 @@ import { ReporterContent, ValueSlot } from "./editor/blocks/Values";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
-import { allBlocks, getStartAttachedBlocks, hydrateBlockGraph, normalizeBlockGraph, putCondition, putValue, removeIds } from "./editor/blockTree";
+import { allBlocks, getStartAttachedBlocks, normalizeBlockGraph, putCondition, putValue, removeIds } from "./editor/blockTree";
 import { createBlock, updateBlockTree } from "./editor/blockOperations";
 import { useCanvasPan } from "./editor/useCanvasPan";
 
@@ -335,6 +335,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const attached = moving.map((block, index) => ({
             ...block,
             attachedTo: index === 0 ? parentId : moving[index - 1]!.id,
+            attachmentType: "stack" as const,
+            attachmentField: undefined,
           }));
           rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
           return rest;
@@ -804,7 +806,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       if (valueTarget && valueTarget.length===2) {
         const [ownerId,field]=valueTarget;
         const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
-        if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,{...child,attachedTo:undefined}));
+        if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) {
+          setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
+          if (payload.source === "canvas") setPositions(current => { const next = {...current}; payload.ids.forEach(id => delete next[id]); return next; });
+          setSelected([child.id]);
+          setStatus("idle");
+        }
         return;
       }
       const conditionTarget = resolvedTargetId?.startsWith("condition:") ? resolvedTargetId.slice("condition:".length) : undefined;
@@ -838,7 +845,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         } else if (isReporter) {
           const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
           if (child && point) {
-            setBlocks(current=>[...removeIds(current,payload.ids),child]);
+            setBlocks(current=>[...removeIds(current,payload.ids),{...child,attachedTo:undefined,attachmentType:undefined,attachmentField:undefined}]);
             setPositions(current=>({...current,[child.id]:point}));
             setSelected([child.id]);
           }
