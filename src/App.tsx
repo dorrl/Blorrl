@@ -258,19 +258,11 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
         if (!element) return;
         element.style.willChange = "transform, opacity";
-        if (ghost) {
-          const origin = drag.origins[id] ?? {x: element.offsetLeft, y: element.offsetTop};
-          let predictedY = ghost.y;
-          if (index > 0) {
-            predictedY += drag.ids.slice(0, index).reduce((height, previousId) =>
-              height + (canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${previousId}"]`)?.offsetHeight ?? 38) - 1, 0);
-          }
-          element.style.transform = `translate(${ghost.x - origin.x}px, ${predictedY - origin.y}px)`;
-          element.style.opacity = "0.62";
-        } else {
-          element.style.transform = `translate(${dx}px, ${dy}px)`;
-          element.style.opacity = "";
-        }
+        // Keep the dragged source under the pointer. The separate ghost below
+        // previews the magnetic connection position, as EntryJS separates the
+        // moving BlockView from its connection/magnet feedback.
+        element.style.transform = `translate(${dx}px, ${dy}px)`;
+        element.style.opacity = ghost ? "0.42" : "";
       });
       const previousGhost = snapGhostRef.current;
       if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
@@ -912,6 +904,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}} onDragOver={handleLibraryDragOver}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point</small></div><span className="fixed-pill"></span></div>
           <div className="flow-stem"><span/></div>
+          {snapGhost && dragPreview && !libraryDragKind && <div
+            ref={snapGhostContentRef}
+            className="snap-ghost-preview"
+            aria-hidden="true"
+            style={{ left: snapGhost.x, top: snapGhost.y }}
+          />}
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
           {blocks.map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (["get","true","false","add","compare"].includes(block.kind) ? " value-block-model" : "") + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
