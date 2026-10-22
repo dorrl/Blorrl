@@ -84,7 +84,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   });
   const [spaceDown, setSpaceDown] = useState(false);
   const [typePanelFor, setTypePanelFor] = useState<string | null>(null);
-  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null); 
+  const dragOrigin = useRef<{x:number;y:number;ids:string[];origins:Record<string,{x:number;y:number}>}|null>(null);
+  const socketReporterDropHandled = useRef(false); 
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
@@ -633,6 +634,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       restoreLibraryDragElement();
     }
     if (payload.source === "canvas") {
+      socketReporterDropHandled.current = false;
       const nestedReporter = !!(event.target as HTMLElement).closest(".value-chip");
       const ids = !nestedReporter && selected.includes(payload.ids[0]) ? selected : payload.ids;
       const origins: Record<string,{x:number;y:number}> = {};
@@ -644,6 +646,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const drag = dragOrigin.current;
     if (!drag) return;
     dragOrigin.current = null;
+    if (socketReporterDropHandled.current) {
+      socketReporterDropHandled.current = false;
+      return;
+    }
     // Native drag is used for socket reporters. If they are released outside a
     // socket, explicitly detach them and place them at the pointer instead of
     // leaving the attachment metadata behind.
@@ -831,7 +837,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const ghostTarget = snapGhostRef.current?.targetId;
     const insertionTarget = ghostTarget?.startsWith("__insert__:") ? ghostTarget.slice("__insert__:".length) : undefined;
     const socketTarget = ghostTarget?.startsWith("__value__:") ? `value:${ghostTarget.slice("__value__:".length)}` : ghostTarget?.startsWith("__condition__:") ? `condition:${ghostTarget.slice("__condition__:".length)}` : undefined;
-    const resolvedTargetId = ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId;
+    // A drop event fired directly by a socket is more reliable than a stale
+    // pointer-magnet target left over from the previous drag frame.
+    const explicitSocketTarget = targetId?.startsWith("value:") || targetId?.startsWith("condition:") ? targetId : undefined;
+    const resolvedTargetId = explicitSocketTarget ?? (ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId);
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     restoreLibraryDragElement();
@@ -844,6 +853,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
         if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) {
           setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
+          if (payload.source === "canvas") socketReporterDropHandled.current = true;
           if (payload.source === "canvas") setPositions(current => { const next = {...current}; payload.ids.forEach(id => delete next[id]); return next; });
           setSelected([child.id]);
           setStatus("idle");
