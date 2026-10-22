@@ -53,6 +53,7 @@ export function ValueSlot({
         <span
           data-block-id={nested.id}
           className={"block-card value-block-model value-chip category-values kind-" + nested.kind}
+          style={{ position: "relative", left: "auto", top: "auto", zIndex: "auto", flex: "0 0 auto" }}
           draggable
           onDragStart={(event) => onDragStart(event, nested.id)}
         >
