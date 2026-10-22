@@ -50,15 +50,18 @@ export function ValueSlot({
       }}
     >
       {nested ? (
-        <>
-          <span
-            className={"value-chip kind-" + nested.kind}
-            draggable
-            onDragStart={(event) => onDragStart(event, nested.id)}
-          >
-            {nested.kind === "add" ? <Calculate block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : nested.kind === "compare" ? <Compare block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : <ReporterContent block={nested} updateBlock={updateBlock} />}
+        <span
+          data-block-id={nested.id}
+          className={"block-card value-block-model value-chip category-values kind-" + nested.kind}
+          draggable
+          onDragStart={(event) => onDragStart(event, nested.id)}
+        >
+          <span className="block-content">
+            <span className="block-fields">
+              {nested.kind === "add" ? <Calculate block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : nested.kind === "compare" ? <Compare block={nested} renderValueSlot={renderValueSlot} updateBlock={updateBlock} /> : <ReporterContent block={nested} updateBlock={updateBlock} />}
+            </span>
           </span>
-        </>
+        </span>
       ) : (
         <input
           className="value-input"
