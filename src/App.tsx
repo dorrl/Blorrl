@@ -515,6 +515,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         updateBlock={updateBlock}
         onDrop={onDrop}
         onDragStart={(event, id) => onDragStart(event, { source: "canvas", ids: [id] })}
+        onDragEnd={onBlockDragEnd}
         renderValueSlot={renderValueSlot}
       />
     );
