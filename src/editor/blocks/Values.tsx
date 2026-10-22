@@ -20,6 +20,7 @@ type ValueSlotProps = {
   updateBlock: (id: string, patch: Partial<Block>) => void;
   onDrop: (event: DragEvent, targetId?: string) => void;
   onDragStart: (event: DragEvent, id: string) => void;
+  onDragEnd: (event: DragEvent) => void;
   renderValueSlot: ValueSlotRenderer;
   nestedBlock?: Block;
 };
@@ -33,6 +34,7 @@ export function ValueSlot({
   updateBlock,
   onDrop,
   onDragStart,
+  onDragEnd,
   renderValueSlot,
   nestedBlock,
 }: ValueSlotProps) {
@@ -60,6 +62,7 @@ export function ValueSlot({
           style={{ position: "relative", left: "auto", top: "auto", zIndex: "auto", flex: "0 0 auto" }}
           draggable
           onDragStart={(event) => onDragStart(event, nested.id)}
+          onDragEnd={onDragEnd}
         >
           <span className="block-content">
             <span className="block-fields">
