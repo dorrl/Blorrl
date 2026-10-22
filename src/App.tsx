@@ -287,7 +287,9 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         // previews the magnetic connection position, as EntryJS separates the
         // moving BlockView from its connection/magnet feedback.
         element.style.transform = `translate(${dx}px, ${dy}px)`;
-        element.style.opacity = ghost ? "0.42" : "";
+        // The cloned preview is the only visible representation during a drag.
+        // Hiding the source avoids the pointer-position/socket-position flicker.
+        element.style.opacity = ghost ? "0" : "";
       });
       const previousGhost = snapGhostRef.current;
       if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
@@ -639,11 +641,31 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     }
   }
   function onBlockDragEnd(event: DragEvent) {
-    // Socket reporter drags are finalized by onDrop; avoid applying the stack detach path twice.
-    if ((event.target as HTMLElement).closest(".value-chip")) return;
     const drag = dragOrigin.current;
     if (!drag) return;
     dragOrigin.current = null;
+    // Native drag is used for socket reporters. If they are released outside a
+    // socket, explicitly detach them and place them at the pointer instead of
+    // leaving the attachment metadata behind.
+    if ((event.target as HTMLElement).closest(".value-chip")) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(12, event.clientX - rect.left + canvas.scrollLeft - 10);
+      const y = Math.max(64, event.clientY - rect.top + canvas.scrollTop - 15);
+      setBlocks(current => current.map(block => drag.ids.includes(block.id)
+        ? { ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined }
+        : block));
+      setPositions(current => {
+        const next = { ...current };
+        drag.ids.forEach(id => { next[id] = { x, y }; });
+        return next;
+      });
+      setSnapGhost(null);
+      snapGhostRef.current = null;
+      setStatus("idle");
+      return;
+    }
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     const next: Record<string,{x:number;y:number}> = {...positionsRef.current};
     drag.ids.forEach(item => { const p=drag.origins[item]; next[item]={x:Math.max(12,p.x+dx),y:Math.max(64,p.y+dy)}; });
