@@ -2,6 +2,10 @@ import type { DragEvent, ReactNode } from "react";
 import type { Block } from "../../language";
 import { Calculate } from "./Calculate";
 import { Compare } from "./Compare";
+import { catalog } from "../blockCatalog";
+function valueCategoryClass(kind: Block["kind"]) {
+  return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase();
+}
 type ValueSlotRenderer = (owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) => ReactNode;
 
 type ReporterContentProps={block:Block;updateBlock:(id:string,patch:Partial<Block>)=>void};
@@ -52,7 +56,7 @@ export function ValueSlot({
       {nested ? (
         <span
           data-block-id={nested.id}
-          className={"block-card value-block-model value-chip category-values kind-" + nested.kind}
+          className={"block-card value-block-model value-chip " + valueCategoryClass(nested.kind) + " kind-" + nested.kind}
           style={{ position: "relative", left: "auto", top: "auto", zIndex: "auto", flex: "0 0 auto" }}
           draggable
           onDragStart={(event) => onDragStart(event, nested.id)}
