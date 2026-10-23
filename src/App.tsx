@@ -310,7 +310,33 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 20 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
         : candidate);
-      const ghost = snap ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id } : null;
+      const graphBeforeDrop = blocksRef.current;
+      const draggedBlock = allBlocks(graphBeforeDrop).find(block => drag.ids.includes(block.id));
+      let connectionValid = false;
+      if (snap?.id.startsWith("__value__:")) {
+        const [, ownerId, field] = snap.id.split(":");
+        if (draggedBlock && ownerId && (field === "valueBlock" || field === "rightBlock")) {
+          const proposed = putValue(removeIds(graphBeforeDrop, drag.ids), ownerId, field, draggedBlock);
+          connectionValid = allBlocks(proposed).some(block =>
+            block.id === draggedBlock.id && block.attachedTo === ownerId &&
+            block.attachmentType === "value" && block.attachmentField === field
+          );
+        }
+      } else if (snap?.id.startsWith("__condition__:")) {
+        const ownerId = snap.id.slice("__condition__:".length);
+        if (draggedBlock && ownerId) {
+          const proposed = putCondition(removeIds(graphBeforeDrop, drag.ids), ownerId, draggedBlock);
+          connectionValid = allBlocks(proposed).some(block =>
+            block.id === draggedBlock.id && block.attachedTo === ownerId &&
+            block.attachmentType === "condition" && block.attachmentField === "conditionBlock"
+          );
+        }
+      } else if (snap) {
+        connectionValid = connectStackAfter(graphBeforeDrop, drag.ids, snap.id) !== graphBeforeDrop;
+      }
+      const ghost = snap && connectionValid
+        ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id }
+        : null;
       // During stack insertion, shift existing blocks below the target down by
       // the incoming stack's height so the preview matches the resulting layout.
       // These are the original elements; no placeholder or clone is created.
