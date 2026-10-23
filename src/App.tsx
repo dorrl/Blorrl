@@ -518,10 +518,27 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       clone.querySelectorAll(".delete-block").forEach(element => element.remove());
       clone.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => { element.setAttribute("disabled", ""); element.setAttribute("tabindex", "-1"); });
       clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => { element.style.position = "relative"; element.style.left = "auto"; element.style.top = "auto"; element.style.transform = "none"; element.style.zIndex = "auto"; });
-      // Let the cloned DOM calculate its own intrinsic width and height. This
-      // keeps the preview aligned with nested value reporters and avoids stale
-      // measurements when an expression changes size during a drag.
-      Object.assign(clone.style, { position: "relative", left: "auto", top: "auto", transform: "none", zIndex: "auto", width: "max-content", minHeight: "0", height: "auto", boxSizing: "border-box", marginTop: index ? "-1px" : "0", pointerEvents: "none" });
+      // The ghost must size as a complete DOM subtree. Clear the canvas
+      // width caps on the cloned root and every nested reporter; otherwise a
+      // child can grow while its parent remains constrained to the old width.
+      clone.classList.add("ghost-layout");
+      Object.assign(clone.style, {
+        position: "relative", left: "auto", top: "auto", right: "auto", bottom: "auto",
+        transform: "none", zIndex: "auto", width: "max-content", minWidth: "max-content",
+        maxWidth: "none", minHeight: "0", maxHeight: "none", height: "auto",
+        flex: "0 0 auto", boxSizing: "border-box", marginTop: index ? "-1px" : "0",
+        pointerEvents: "none",
+      });
+      clone.querySelectorAll<HTMLElement>(".block-card, .block-content, .block-fields, .value-slot, .inline-reporter, .inline-operator-fields").forEach(element => {
+        Object.assign(element.style, {
+          width: "max-content", minWidth: "0", maxWidth: "none", height: "auto",
+          minHeight: "0", maxHeight: "none", flexShrink: "0", overflow: "visible",
+        });
+      });
+      clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => {
+        element.style.flex = "0 0 auto";
+        element.style.marginRight = "0";
+      });
       container.appendChild(clone);
     });
   }, [snapGhost?.targetId, dragPreview?.ids.join(","), libraryDragKind]);
