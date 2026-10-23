@@ -565,7 +565,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const findBlock = (id: string) => Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(el => el.dataset.blockId === id) ?? null;
     const sourceFor = (id: string) => libraryDragKind ? libraryDragElementRef.current : findBlock(id);
     const clean = <T extends HTMLElement>(el: T): T => {
-      el.classList.remove("selected", "ghost-source-hidden", "library-drag-active");
+      el.classList.remove("selected", "library-drag-active");
       el.removeAttribute("data-block-id"); el.removeAttribute("data-drop-into");
       el.setAttribute("aria-hidden", "true"); el.setAttribute("inert", "");
       el.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(node => { node.removeAttribute("data-block-id"); node.removeAttribute("data-drop-into"); });
@@ -613,7 +613,11 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       } else {
         const slot = ownerClone.querySelector<HTMLElement>(".condition-slot[data-condition-for]");
         if (!slot) return;
-        if (kind === "true" || kind === "false") slot.replaceChildren(document.createTextNode(kind === "true" ? "True" : "False"));
+        if (kind === "true" || kind === "false") {
+          const label = document.createElement("strong");
+          label.textContent = kind === "true" ? "True" : "False";
+          slot.replaceChildren(label);
+        }
         else if (kind === "compare") {
           const fields = source.querySelector<HTMLElement>(".inline-operator-fields");
           if (!fields) return;
