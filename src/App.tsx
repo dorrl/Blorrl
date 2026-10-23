@@ -284,7 +284,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
 
-      const canvasRect = canvas.getBoundingClientRect();
       // Snap hit-testing follows the pointer itself, not the dragged block's bounds.
       const pointerX = event.clientX;
       const pointerY = event.clientY;
