@@ -253,6 +253,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     return () => { active = false; };
   }, []);
   useEffect(() => {
+    // The graph does not change during a drag. Cache validation per target so
+    // pointer movement within the same snap zone does not rebuild/validate the
+    // same candidate graph on every animation frame.
+    let lastValidationGraph: Block[] | null = null;
+    let lastValidationKey = "";
+    let lastValidationResult = false;
+
     const handleBlockPointerMove = (event: PointerEvent) => {
       const drag = blockPointerDrag.current;
       const canvas = canvasRef.current;
@@ -311,28 +318,36 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         ? startCandidate
         : candidate);
       const graphBeforeDrop = blocksRef.current;
-      const draggedBlock = allBlocks(graphBeforeDrop).find(block => drag.ids.includes(block.id));
+      const validationKey = snap ? `${drag.ids.join(",")}|${snap.id}` : "";
       let connectionValid = false;
-      if (snap?.id.startsWith("__value__:")) {
-        const [, ownerId, field] = snap.id.split(":");
-        if (draggedBlock && ownerId && (field === "valueBlock" || field === "rightBlock")) {
-          const proposed = putValue(graphBeforeDrop, ownerId, field, draggedBlock);
-          connectionValid = allBlocks(proposed).some(block =>
-            block.id === draggedBlock.id && block.attachedTo === ownerId &&
-            block.attachmentType === "value" && block.attachmentField === field
-          );
+      if (lastValidationGraph === graphBeforeDrop && lastValidationKey === validationKey) {
+        connectionValid = lastValidationResult;
+      } else {
+        const draggedBlock = allBlocks(graphBeforeDrop).find(block => drag.ids.includes(block.id));
+        if (snap?.id.startsWith("__value__:")) {
+          const [, ownerId, field] = snap.id.split(":");
+          if (draggedBlock && ownerId && (field === "valueBlock" || field === "rightBlock")) {
+            const proposed = putValue(graphBeforeDrop, ownerId, field, draggedBlock);
+            connectionValid = allBlocks(proposed).some(block =>
+              block.id === draggedBlock.id && block.attachedTo === ownerId &&
+              block.attachmentType === "value" && block.attachmentField === field
+            );
+          }
+        } else if (snap?.id.startsWith("__condition__:")) {
+          const ownerId = snap.id.slice("__condition__:".length);
+          if (draggedBlock && ownerId) {
+            const proposed = putCondition(graphBeforeDrop, ownerId, draggedBlock);
+            connectionValid = allBlocks(proposed).some(block =>
+              block.id === draggedBlock.id && block.attachedTo === ownerId &&
+              block.attachmentType === "condition" && block.attachmentField === "conditionBlock"
+            );
+          }
+        } else if (snap) {
+          connectionValid = connectStackAfter(graphBeforeDrop, drag.ids, snap.id) !== graphBeforeDrop;
         }
-      } else if (snap?.id.startsWith("__condition__:")) {
-        const ownerId = snap.id.slice("__condition__:".length);
-        if (draggedBlock && ownerId) {
-          const proposed = putCondition(graphBeforeDrop, ownerId, draggedBlock);
-          connectionValid = allBlocks(proposed).some(block =>
-            block.id === draggedBlock.id && block.attachedTo === ownerId &&
-            block.attachmentType === "condition" && block.attachmentField === "conditionBlock"
-          );
-        }
-      } else if (snap) {
-        connectionValid = connectStackAfter(graphBeforeDrop, drag.ids, snap.id) !== graphBeforeDrop;
+        lastValidationGraph = graphBeforeDrop;
+        lastValidationKey = validationKey;
+        lastValidationResult = connectionValid;
       }
       const ghost = snap && connectionValid
         ? { x: snap.x, y: snap.y, count: drag.ids.length, targetId: snap.id }
