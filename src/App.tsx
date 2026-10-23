@@ -432,8 +432,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         element.style.opacity = "1";
       });
-      const previousGhost = snapGhostRef.current;
-      
       snapGhostRef.current = ghost;
       if (Math.hypot(dx, dy) > 3) event.preventDefault();
     };
@@ -1029,8 +1027,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         insertionPreviewElementsRef.current.push(element);
       });
     }
-    const previous = snapGhostRef.current;
-    
     snapGhostRef.current = nextGhost;
   }
   function onLibraryDragEnd() {
