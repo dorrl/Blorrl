@@ -1346,64 +1346,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .nested-item input:focus {
   outline: 2px solid #8cc8ff;
 }
-/* Direct block dragging: only the valid snap destination gets a ghost preview. */
+/* Prevent the browser from starting its native image drag for canvas blocks. */
 .block-card {
   -webkit-user-drag: none;
-}
-.snap-ghost {
-  position: absolute;
-  z-index: 7;
-  width: 330px;
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 14px;
-  border: 2px dashed #b5ddff;
-  border-radius: 7px;
-  background: #8cc8ff22;
-  color: #cce8ff;
-  font: 9px var(--mono);
-  letter-spacing: .7px;
-  pointer-events: none;
-  box-shadow: 0 0 0 4px #8cc8ff12;
-}
-.snap-ghost.value-snap-ghost {
-  width: max-content;
-  max-width: min(520px, calc(100vw - 40px));
-  min-height: 0;
-  display: block;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  transform: translateY(-50%);
-}
-.snap-ghost.value-snap-ghost > .value-chip {
-  display: inline-block;
-  opacity: .82;
-  outline: 2px dashed #b5ddff;
-  outline-offset: 2px;
-  pointer-events: none;
-}
-.snap-ghost.value-snap-ghost .value-slot {
-  border-color: #b5ddff;
-}
-.snap-ghost > span {
-  display: block;
-  width: 7px;
-  height: 7px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #8cc8ff;
-  box-shadow: 0 0 9px #8cc8ff;
-}
-@media(max-width:760px) {
-  .snap-ghost {
-    width: 290px;
-    min-height: 48px;
-  }
 }
 /* Compact, Entry-inspired block layout */
 .block-card {
@@ -2079,64 +2024,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .catalog-icon.category-control, .type-icon.category-control { background: #233e43 !important; color: #7dd9df !important; }
 .catalog-icon.category-values, .type-icon.category-values { background: #392d4a !important; color: #d0a3ff !important; }
 
-/* The ghost contains inert clones of the dragged blocks, not a generic placeholder. */
-.snap-ghost.snap-ghost-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  width: max-content;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  letter-spacing: normal;
-}
-.snap-ghost.snap-ghost-stack > .block-card {
-  flex: 0 0 auto;
-  box-shadow: 0 4px 12px #0004;
-  filter: saturate(.82);
-}
-.snap-ghost.snap-ghost-stack.value-snap-ghost {
-  width: max-content;
-  max-width: min(520px, calc(100vw - 40px));
-  transform: translateY(-50%);
-}
-.snap-ghost.snap-ghost-stack.value-snap-ghost > .block-card {
-  max-width: min(520px, calc(100vw - 40px));
-}
-
-
-/* Keep the source visible during direct dragging; it is the snap preview. */
-.block-card.ghost-source-hidden {
-  opacity: .62 !important;
-  pointer-events: none;
-}
-
-/* Keep the preview geometrically identical while making the entire stack translucent. */
-.snap-ghost.snap-ghost-stack {
-  opacity: .58;
-}
-.snap-ghost.snap-ghost-stack > .block-card {
-  box-sizing: border-box;
-  flex-shrink: 0;
-  filter: none;
-}
-/* A palette drag is presented as the real block, not a faded placeholder. */
-.snap-ghost.snap-ghost-stack.library-drag-preview { opacity: 1; }
-.snap-ghost.snap-ghost-stack.library-drag-preview.library-drag-snapping { opacity: .58; }
-.block-card.library-drag-preview { opacity: 1; pointer-events: none; }
-.block-card.library-drag-preview.library-drag-snapping { opacity: .58; }
-.snap-ghost.snap-ghost-stack.library-drag-preview.value-snap-ghost > .value-chip {
-  opacity: 1;
-  outline: 0;
-}
-
-
 /* Block palette previews reuse the canvas block silhouette and typography. */
 .catalog-item { display:block; width:100%; padding:0; background:transparent; border:0; text-align:left; cursor:grab; overflow:visible; -webkit-user-drag: element; }
 .catalog-item:active { cursor:grabbing; }
@@ -2401,11 +2288,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 
 
 
-/* Keep the real dragged block visible: it is also the snap preview. */
-.block-card.ghost-source-hidden {
-  opacity: .62 !important;
-}
-
 /* Statement blocks expand with their parameters instead of clipping at 330px. */
 .block-card.kind-let,
 .block-card.kind-input {
@@ -2551,56 +2433,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   flex-wrap: nowrap;
 }
 
-/* Ghosts use the same nested DOM as real blocks, but without the canvas
-   max-width caps. Intrinsic sizing then propagates reporter width to its owner. */
+/* Preview clones retain the same sizing rules as the committed block DOM. */
 .snap-ghost-preview {
   width: max-content;
   max-width: none;
   height: auto;
   gap: 0;
   overflow: visible;
-}
-
-.snap-ghost-preview > .ghost-layout,
-.snap-ghost-preview .ghost-layout .block-card {
-  width: max-content !important;
-  min-width: max-content;
-  max-width: none !important;
-  height: auto;
-  min-height: 0;
-  max-height: none;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-}
-
-.snap-ghost-preview .ghost-layout .block-content,
-.snap-ghost-preview .ghost-layout .block-fields,
-.snap-ghost-preview .ghost-layout .value-slot,
-.snap-ghost-preview .ghost-layout .inline-reporter,
-.snap-ghost-preview .ghost-layout .inline-operator-fields {
-  width: max-content;
-  min-width: 0;
-  max-width: none;
-  height: auto;
-  min-height: 0;
-  max-height: none;
-  flex: 0 0 auto;
-  overflow: visible;
-}
-
-.snap-ghost-preview .ghost-layout .block-fields {
-  flex-wrap: nowrap;
-  gap: 7px;
-}
-
-.snap-ghost-preview .ghost-layout .value-slot > .value-chip {
-  width: max-content;
-  min-width: max-content;
-  max-width: none;
-  height: auto;
-  min-height: 30px;
-  max-height: none;
-  flex: 0 0 auto;
 }
 
 /* A nested expression determines the parent's intrinsic width, with the
