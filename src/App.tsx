@@ -918,10 +918,16 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       }
       const conditionTarget = resolvedTargetId?.startsWith("condition:") ? resolvedTargetId.slice("condition:".length) : undefined;
       if (conditionTarget) {
-        if (payload.source === "library") dropCondition(conditionTarget,createBlock(payload.kind));
-        else {
+        if (payload.source === "library") {
+          dropCondition(conditionTarget,createBlock(payload.kind));
+        } else {
           const child = allBlocks(blocks).find(b=>payload.ids.includes(b.id));
-          if (child) dropCondition(conditionTarget,child,payload.ids);
+          if (child && ["true", "false", "compare"].includes(child.kind)) {
+            // Prevent drag-end from treating a successful condition connection
+            // as a loose reporter drop.
+            socketReporterDropHandled.current = true;
+            dropCondition(conditionTarget,child,payload.ids);
+          }
         }
         return;
       }
