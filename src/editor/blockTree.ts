@@ -1,4 +1,5 @@
 import type { Block } from "../language";
+import { validateBlockGraph } from "./blockGraphValidation";
 
 export const allBlocks = (items: Block[]): Block[] => {
   const found = new Map<string, Block>();
@@ -124,15 +125,23 @@ export function removeIds(items: Block[], ids: string[]): Block[] {
 }
 
 export function putValue(items: Block[], targetId: string, field: "valueBlock" | "rightBlock", valueBlock: Block): Block[] {
-  const rest = items.filter(block => !(block.attachedTo === targetId && block.attachmentType === "value" && block.attachmentField === field));
+  const oldIds = allBlocks(items)
+    .filter(block => block.attachedTo === targetId && block.attachmentType === "value" && block.attachmentField === field)
+    .map(block => block.id);
+  const rest = removeIds(removeIds(items, oldIds), [valueBlock.id]);
   const child: Block = { ...valueBlock, attachedTo: targetId, attachmentType: "value", attachmentField: field };
-  return [...rest.filter(block => block.id !== child.id), child];
+  const candidate = [...rest, child];
+  return validateBlockGraph(candidate).valid ? candidate : items;
 }
 
 export function putCondition(items: Block[], targetId: string, conditionBlock: Block): Block[] {
-  const rest = items.filter(block => !(block.attachedTo === targetId && block.attachmentType === "condition" && block.attachmentField === "conditionBlock"));
+  const oldIds = allBlocks(items)
+    .filter(block => block.attachedTo === targetId && block.attachmentType === "condition" && block.attachmentField === "conditionBlock")
+    .map(block => block.id);
+  const rest = removeIds(removeIds(items, oldIds), [conditionBlock.id]);
   const child: Block = { ...conditionBlock, attachedTo: targetId, attachmentType: "condition", attachmentField: "conditionBlock" };
-  return [...rest.filter(block => block.id !== child.id), child];
+  const candidate = [...rest, child];
+  return validateBlockGraph(candidate).valid ? candidate : items;
 }
 
 /** Return the Start-connected statement chain, with socket connections hydrated for execution. */
