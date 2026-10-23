@@ -1,4 +1,4 @@
-import type { DragEvent, ReactNode } from "react";
+import type { DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type { Block } from "../../language";
 import { Calculate } from "./Calculate";
 import { Compare } from "./Compare";
@@ -21,6 +21,7 @@ type ValueSlotProps = {
   onDrop: (event: DragEvent, targetId?: string) => void;
   onDragStart: (event: DragEvent, id: string) => void;
   onDragEnd: (event: DragEvent) => void;
+  onReporterPointerDown: (event: ReactPointerEvent<HTMLSpanElement>, id: string) => void;
   renderValueSlot: ValueSlotRenderer;
   nestedBlock?: Block;
 };
@@ -35,6 +36,7 @@ export function ValueSlot({
   onDrop,
   onDragStart,
   onDragEnd,
+  onReporterPointerDown,
   renderValueSlot,
   nestedBlock,
 }: ValueSlotProps) {
@@ -60,9 +62,7 @@ export function ValueSlot({
           data-block-id={nested.id}
           className={"block-card value-block-model value-chip " + valueCategoryClass(nested.kind) + " kind-" + nested.kind}
           style={{ position: "relative", left: "auto", top: "auto", zIndex: "auto", flex: "0 0 auto" }}
-          draggable
-          onDragStart={(event) => onDragStart(event, nested.id)}
-          onDragEnd={onDragEnd}
+          onPointerDown={(event) => onReporterPointerDown(event, nested.id)}
         >
           <span className="block-content">
             <span className="block-fields">
