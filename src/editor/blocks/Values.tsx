@@ -19,8 +19,6 @@ type ValueSlotProps = {
   ariaLabel: string;
   updateBlock: (id: string, patch: Partial<Block>) => void;
   onDrop: (event: DragEvent, targetId?: string) => void;
-  onDragStart: (event: DragEvent, id: string) => void;
-  onDragEnd: (event: DragEvent) => void;
   onReporterPointerDown: (event: ReactPointerEvent<HTMLSpanElement>, id: string) => void;
   renderValueSlot: ValueSlotRenderer;
   nestedBlock?: Block;
@@ -34,8 +32,6 @@ export function ValueSlot({
   ariaLabel,
   updateBlock,
   onDrop,
-  onDragStart,
-  onDragEnd,
   onReporterPointerDown,
   renderValueSlot,
   nestedBlock,
