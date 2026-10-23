@@ -157,7 +157,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const libraryDragElementRef = useRef<HTMLElement | null>(null);
   const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
-  const snapGhostContentRef = useRef<HTMLDivElement>(null);
+  const socketPreviewOwnerRef = useRef<{element: HTMLElement; width: string; minWidth: string; boxSizing: string} | null>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
@@ -282,6 +282,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       if (Math.hypot(dx, dy) > 3) blockDragMoved.current = true;
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
+      restoreSocketPreviewOwner();
+      drag.ids.forEach(id => { const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
 
@@ -406,20 +408,32 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           insertionPreviewElementsRef.current.push(element);
         });
       }
-      // While a valid connection is predicted, temporarily pin the dragged
-      // original block(s) to the predicted final layout and fade them slightly.
-      // No placeholder or cloned preview element is created.
-      drag.ids.forEach((id, index) => {
+      // Use the original dragged elements as the only preview; no DOM clones.
+      let stackOffset = 0;
+      drag.ids.forEach(id => {
         const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`);
         if (!element) return;
-        element.style.willChange = "transform, opacity";
-        // Keep the dragged source under the pointer. The separate ghost below
-        // previews the magnetic connection position, as EntryJS separates the
-        // moving BlockView from its connection/magnet feedback.
-        element.style.transform = `translate(${dx}px, ${dy}px)`;
-        // The cloned preview is the only visible representation during a drag.
-        // Hiding the source avoids the pointer-position/socket-position flicker.
-        element.style.opacity = ghost ? "0" : "";
+        element.style.willChange = "transform";
+        if (ghost?.targetId.startsWith("__value__:") || ghost?.targetId.startsWith("__condition__:")) {
+          const isValue = ghost.targetId.startsWith("__value__:");
+          const [, ownerId, field] = ghost.targetId.split(":");
+          const selector = isValue ? `.value-slot[data-value-for="${ownerId}"][data-value-field="${field}"]` : `.condition-slot[data-condition-for="${ownerId}"]`;
+          const slot = Array.from(canvas.querySelectorAll<HTMLElement>(selector))[0];
+          const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
+          if (slot && owner) {
+            const slotRect = slot.getBoundingClientRect(), sourceRect = element.getBoundingClientRect();
+            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
+            owner.style.boxSizing = "border-box";
+            owner.style.width = `${Math.max(owner.offsetWidth, slotRect.right - owner.getBoundingClientRect().left + element.offsetWidth + 16)}px`;
+            owner.style.minWidth = owner.style.width;
+            element.style.transform = `translate(${slotRect.left - sourceRect.left}px, ${slotRect.top - sourceRect.top}px)`;
+          } else element.style.transform = `translate(${dx}px, ${dy}px)`;
+        } else if (ghost) {
+          const origin = drag.origins[id];
+          element.style.transform = `translate(${ghost.x - (origin?.x ?? element.offsetLeft)}px, ${ghost.y + stackOffset - (origin?.y ?? element.offsetTop)}px)`;
+          stackOffset += element.offsetHeight - 1;
+        } else element.style.transform = `translate(${dx}px, ${dy}px)`;
+        element.style.opacity = "1";
       });
       const previousGhost = snapGhostRef.current;
       if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
@@ -433,6 +447,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       blockPointerDrag.current = null;
       const canvas = canvasRef.current;
       drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
+      restoreSocketPreviewOwner();
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
       const dx = event.clientX - drag.startX;
@@ -555,88 +570,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     };
   }, []);
 
-  useEffect(() => {
-    const container = snapGhostContentRef.current;
-    const canvas = canvasRef.current;
-    if (!container) return;
-    container.replaceChildren();
-    if (!snapGhost || !canvas) return;
-
-    const findBlock = (id: string) => Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(el => el.dataset.blockId === id) ?? null;
-    const sourceFor = (id: string) => libraryDragKind ? libraryDragElementRef.current : findBlock(id);
-    const clean = <T extends HTMLElement>(el: T): T => {
-      el.classList.remove("selected", "library-drag-active");
-      el.removeAttribute("data-block-id"); el.removeAttribute("data-drop-into");
-      el.setAttribute("aria-hidden", "true"); el.setAttribute("inert", "");
-      el.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(node => { node.removeAttribute("data-block-id"); node.removeAttribute("data-drop-into"); });
-      el.querySelectorAll(".delete-block").forEach(node => node.remove());
-      el.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(node => { node.setAttribute("disabled", ""); node.setAttribute("tabindex", "-1"); });
-      return el;
-    };
-    const layoutRoot = <T extends HTMLElement>(el: T): T => {
-      clean(el);
-      Object.assign(el.style, {position:"relative",left:"auto",top:"auto",right:"auto",bottom:"auto",transform:"none",zIndex:"auto",margin:"0",pointerEvents:"none"});
-      return el;
-    };
-    const valueChip = (source: HTMLElement, kind: BlockKind) => {
-      const fields = source.querySelector<HTMLElement>(".block-fields");
-      if (!fields) return null;
-      const chip = document.createElement("span");
-      chip.className = "block-card value-block-model value-chip " + categoryClass(kind) + " kind-" + kind;
-      const content = document.createElement("span"); content.className = "block-content";
-      const clonedFields = document.createElement("span"); clonedFields.className = "block-fields";
-      if (kind === "true" || kind === "false") clonedFields.textContent = kind;
-      else Array.from(fields.childNodes).forEach(node => clonedFields.append(node.cloneNode(true)));
-      content.append(clean(clonedFields)); chip.append(content);
-      return layoutRoot(chip);
-    };
-
-    const valueSocket = snapGhost.targetId.startsWith("__value__:");
-    const conditionSocket = snapGhost.targetId.startsWith("__condition__:");
-    if (valueSocket || conditionSocket) {
-      const [, ownerId, field] = snapGhost.targetId.split(":");
-      const source = sourceFor(dragPreview?.ids.length === 1 ? dragPreview.ids[0]! : "");
-      const targetSelector = valueSocket
-        ? `.value-slot[data-value-for="${ownerId}"][data-value-field="${field}"]`
-        : `.condition-slot[data-condition-for="${ownerId}"]`;
-      const targetSlot = Array.from(canvas.querySelectorAll<HTMLElement>(targetSelector))[0];
-      const owner = targetSlot ? topLevelBlockContaining(canvas, targetSlot) : null;
-      if (!owner || !source || !ownerId) return;
-      const ownerClone = layoutRoot(owner.cloneNode(true) as HTMLElement);
-      const kind = libraryDragKind ?? (source.className.match(/\bkind-([\w-]+)/)?.[1] as BlockKind | undefined);
-      if (!kind) return;
-      if (valueSocket) {
-        if (field !== "valueBlock" && field !== "rightBlock") return;
-        const slot = Array.from(ownerClone.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]")).find(el => el.dataset.valueFor === ownerId && el.dataset.valueField === field);
-        const chip = valueChip(source, kind);
-        if (!slot || !chip) return;
-        slot.replaceChildren(chip);
-      } else {
-        const slot = ownerClone.querySelector<HTMLElement>(".condition-slot[data-condition-for]");
-        if (!slot) return;
-        if (kind === "true" || kind === "false") {
-          const label = document.createElement("strong");
-          label.textContent = kind === "true" ? "True" : "False";
-          slot.replaceChildren(label);
-        }
-        else if (kind === "compare") {
-          const fields = source.querySelector<HTMLElement>(".inline-operator-fields");
-          if (!fields) return;
-          slot.replaceChildren(...Array.from(fields.childNodes, node => node.cloneNode(true)));
-        } else return;
-      }
-      container.append(ownerClone);
-      return;
-    }
-    if (!dragPreview) return;
-    dragPreview.ids.forEach((id,index) => {
-      const source = findBlock(id);
-      if (!source) return;
-      const clone = layoutRoot(source.cloneNode(true) as HTMLElement);
-      if (index) clone.style.marginTop = "-1px";
-      container.append(clone);
-    });
-  }, [snapGhost?.targetId, snapGhost?.x, snapGhost?.y, dragPreview?.ids.join(","), libraryDragKind]);
   function startReporterPointerDrag(event: ReactPointerEvent<HTMLSpanElement>, id: string) {
     if (spaceDown || event.button !== 0 || (event.target as HTMLElement).closest("input,button,select,textarea")) return;
     event.preventDefault();
@@ -944,6 +877,15 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     setPositions(next);
     setStatus("idle");
   }
+  function restoreSocketPreviewOwner() {
+    const preview = socketPreviewOwnerRef.current;
+    if (!preview) return;
+    preview.element.style.width = preview.width;
+    preview.element.style.minWidth = preview.minWidth;
+    preview.element.style.boxSizing = preview.boxSizing;
+    socketPreviewOwnerRef.current = null;
+  }
+
   function restoreLibraryDragElement() {
     const element = libraryDragElementRef.current;
     if (element) {
@@ -969,8 +911,9 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       element.style.willChange = "";
     });
     insertionPreviewElementsRef.current = [];
+    restoreSocketPreviewOwner();
     const canvasRect = canvas.getBoundingClientRect();
-    // The palette element follows the pointer; socket snaps preview the owner block instead.
+    // The existing palette element is the preview; it is never cloned.
     const positionOriginalAt = (x: number, y: number) => {
       if (!source) return;
       source.style.opacity = ".58";
@@ -983,13 +926,45 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
         .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.valueFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(owner); return {id:`__value__:${ownerId}:${slot.dataset.valueField}`,x:point.x,y:point.y,area:rect.width*rect.height}; })
         .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
-      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+      if (socket) {
+        const ghost = {...socket,count:1,targetId:socket.id};
+        if (source) {
+          const [, ownerId, field] = socket.id.split(":");
+          const slot = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]")).find(el => el.dataset.valueFor === ownerId && el.dataset.valueField === field);
+          const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
+          if (slot && owner) {
+            const rect = slot.getBoundingClientRect();
+            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
+            owner.style.boxSizing = "border-box";
+            owner.style.width = `${Math.max(owner.offsetWidth, rect.right - owner.getBoundingClientRect().left + source.getBoundingClientRect().width + 16)}px`;
+            owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
+          }
+        }
+        if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+        snapGhostRef.current = ghost; return;
+      }
     }
     if (isConditionReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.conditionFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(owner); return {id:`__condition__:${ownerId}`,x:point.x,y:point.y}; })
         .find((item): item is {id:string;x:number;y:number} => item !== null);
-      if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
+      if (socket) {
+        const ghost = {...socket,count:1,targetId:socket.id};
+        if (source) {
+          const [, ownerId] = socket.id.split(":");
+          const slot = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]")).find(el => el.dataset.conditionFor === ownerId);
+          const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
+          if (slot && owner) {
+            const rect = slot.getBoundingClientRect();
+            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
+            owner.style.boxSizing = "border-box";
+            owner.style.width = `${Math.max(owner.offsetWidth, rect.right - owner.getBoundingClientRect().left + source.getBoundingClientRect().width + 16)}px`;
+            owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
+          }
+        }
+        if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+        snapGhostRef.current = ghost; return;
+      }
     }
     // Keep a real, unscaled block under the pointer even before it reaches a
     // compatible socket. This replaces the browser's native drag screenshot.
@@ -1067,6 +1042,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       element.style.willChange = "";
     });
     insertionPreviewElementsRef.current = [];
+    restoreSocketPreviewOwner();
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
     restoreLibraryDragElement();
@@ -1084,6 +1060,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const resolvedTargetId = explicitSocketTarget ?? (ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId);
     libraryDragKindRef.current = null;
     setLibraryDragKind(null);
+    restoreSocketPreviewOwner();
     restoreLibraryDragElement();
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
     try {
@@ -1242,12 +1219,6 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}} onDragOver={handleLibraryDragOver}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point</small></div><span className="fixed-pill"></span></div>
           <div className="flow-stem"><span/></div>
-          {snapGhost && (dragPreview || (libraryDragKind && (snapGhost.targetId.startsWith("__value__:") || snapGhost.targetId.startsWith("__condition__:")))) && <div
-            ref={snapGhostContentRef}
-            className="snap-ghost-preview"
-            aria-hidden="true"
-            style={{ left: snapGhost.x, top: snapGhost.y }}
-          />}
           {dragPreview && dragCanvasExtent > 0 && <div aria-hidden="true" className="drag-extent-preserver" style={{top:dragCanvasExtent-1}} />}
           {blocks.length === 0 && <div className="empty-state"><Blocks size={26}/><strong>Drop a block to begin</strong><span>Drag from the Explorer or click a block on the left.</span></div>}
           {blocks.filter(block => block.attachmentType !== "value" && block.attachmentType !== "condition").map((block,index) => <article key={block.id} data-block-id={block.id} data-drop-into={block.kind === "if" || block.kind === "repeat" ? block.id : undefined} style={{left:positions[block.id]?.x ?? 42,top:positions[block.id]?.y ?? (90 + index*86),zIndex:typePanelFor===block.id?30:2,touchAction:"none"}} className={"block-card " + categoryClass(block.kind) + " kind-" + block.kind + (["get","true","false","add","compare"].includes(block.kind) ? " value-block-model" : "") + (selected.includes(block.id) ? " selected" : "")} onClickCapture={e => { const target = e.target as HTMLElement; if (target instanceof HTMLInputElement && !blockDragMoved.current) target.focus(); }} onPointerDown={e => {
