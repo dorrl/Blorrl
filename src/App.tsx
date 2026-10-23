@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent } from "react";
+import type { DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Play, Plus, Blocks, ChevronDown, CircleHelp, Download, RotateCcw, GripVertical, Check, Save, FolderOpen } from "lucide-react";
 import { compile, compileAssembly, runProgram, type Block, type BlockKind, type ValueType } from "./language";
 import { BlockLibrary } from "./components/BlockLibrary";
@@ -447,15 +447,37 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           y += (canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`)?.offsetHeight ?? 38) - 1;
         });
       } else {
-        drag.ids.forEach(id => {
-          const origin = drag.origins[id];
-          if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
-        });
-        // Detach only the dragged stack root; its descendants remain connected to each other.
-        const rootId = drag.ids[0];
-        setBlocks(current => current.map(block => block.id === rootId
-          ? ({ ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined })
-          : block));
+        const movingReporter = allBlocks(blocksRef.current).find(block => drag.ids.includes(block.id) && reporterKinds.has(block.kind));
+        if (movingReporter && canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const point = {
+            x: Math.max(12, event.clientX - rect.left + canvas.scrollLeft - 10),
+            y: Math.max(64, event.clientY - rect.top + canvas.scrollTop - 15),
+          };
+          setBlocks(current => {
+            const moving = allBlocks(current).filter(block => drag.ids.includes(block.id));
+            return [
+              ...removeIds(current, drag.ids),
+              ...moving.map(block => ({
+                ...block,
+                attachedTo: undefined,
+                attachmentType: undefined,
+                attachmentField: undefined,
+              })),
+            ];
+          });
+          drag.ids.forEach(id => { next[id] = point; });
+        } else {
+          drag.ids.forEach(id => {
+            const origin = drag.origins[id];
+            if (origin) next[id] = {x:Math.max(12,origin.x+dx),y:Math.max(64,origin.y+dy)};
+          });
+          // Detach only the dragged stack root; its descendants remain connected to each other.
+          const rootId = drag.ids[0];
+          setBlocks(current => current.map(block => block.id === rootId
+            ? ({ ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined })
+            : block));
+        }
       }
 
       setPositions(next);
@@ -589,6 +611,36 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     setSelected([block.id]); setStatus("idle");
   }
 
+  function startReporterPointerDrag(event: ReactPointerEvent<HTMLSpanElement>, id: string) {
+    if (spaceDown || event.button !== 0 || (event.target as HTMLElement).closest("input,button,select,textarea")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const source = event.currentTarget;
+    const canvasRect = canvas.getBoundingClientRect();
+    const sourceRect = source.getBoundingClientRect();
+    const point = {
+      x: sourceRect.left - canvasRect.left + canvas.scrollLeft,
+      y: sourceRect.top - canvasRect.top + canvas.scrollTop,
+    };
+    const ids = [id];
+    setSelected(ids);
+    setDragCanvasExtent(canvas.scrollHeight);
+    setDragPreview({ ids });
+    blockDragMoved.current = false;
+    blockPointerDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      ids,
+      origins: { [id]: point },
+    };
+    snapGhostRef.current = null;
+    setSnapGhost(null);
+    source.setPointerCapture(event.pointerId);
+  }
+
   function renderValueSlot(owner: Block, field: "valueBlock" | "rightBlock", value: string, ariaLabel: string) {
     return (
       <ValueSlot
@@ -601,6 +653,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         onDrop={onDrop}
         onDragStart={(event, id) => onDragStart(event, { source: "canvas", ids: [id] })}
         onDragEnd={onBlockDragEnd}
+        onReporterPointerDown={startReporterPointerDrag}
         renderValueSlot={renderValueSlot}
       />
     );
