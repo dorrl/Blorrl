@@ -518,8 +518,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       clone.querySelectorAll(".delete-block").forEach(element => element.remove());
       clone.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => { element.setAttribute("disabled", ""); element.setAttribute("tabindex", "-1"); });
       clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => { element.style.position = "relative"; element.style.left = "auto"; element.style.top = "auto"; element.style.transform = "none"; element.style.zIndex = "auto"; });
-      const sourceRect = source.getBoundingClientRect();
-      Object.assign(clone.style, { position: "relative", left: "auto", top: "auto", transform: "none", zIndex: "auto", width: `${sourceRect.width}px`, minHeight: `${sourceRect.height}px`, boxSizing: "border-box", marginTop: index ? "-1px" : "0", pointerEvents: "none" });
+      // Let the cloned DOM calculate its own intrinsic width and height. This
+      // keeps the preview aligned with nested value reporters and avoids stale
+      // measurements when an expression changes size during a drag.
+      Object.assign(clone.style, { position: "relative", left: "auto", top: "auto", transform: "none", zIndex: "auto", width: "max-content", minHeight: "0", height: "auto", boxSizing: "border-box", marginTop: index ? "-1px" : "0", pointerEvents: "none" });
       container.appendChild(clone);
     });
   }, [snapGhost?.targetId, dragPreview?.ids.join(","), libraryDragKind]);
