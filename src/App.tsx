@@ -722,6 +722,33 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const update = (items: Block[]): Block[] => items.map(b=>({...b,elseIf:b.elseIf?.map(br=>br.id===branchId?{...br,condition:condition}: {...br,children:update(br.children)}),children:update(b.children??[]),elseChildren:b.elseChildren?update(b.elseChildren):undefined}));
     setBlocks(update); setStatus("idle");
   }
+  function addBlock(kind: BlockKind, targetId?: string, point?: { x: number; y: number }) {
+    const block = createBlock(kind);
+    const isReporter = reporterKinds.has(kind);
+    const target = targetId ? allBlocks(blocksRef.current).find(item => item.id === targetId) : undefined;
+
+    if (!isReporter && targetId && target && (target.kind === "if" || target.kind === "repeat")) {
+      insertNested(targetId, block);
+      if (point) setPositions(current => ({ ...current, [block.id]: point }));
+      return;
+    }
+
+    setBlocks(current => {
+      const next = [...current, block];
+      if (!isReporter && targetId && (targetId === "__start" || allBlocks(current).some(item => item.id === targetId))) {
+        return connectStackAfter(next, [block.id], targetId);
+      }
+      return next;
+    });
+    if (point) {
+      setPositions(current => ({ ...current, [block.id]: point }));
+    } else if (!targetId || isReporter) {
+      setPositions(current => ({ ...current, [block.id]: { x: 42, y: 90 + allBlocks(blocksRef.current).length * 12 } }));
+    }
+    setSelected([block.id]);
+    setStatus("idle");
+  }
+
   function moveSelection(ids: string[], targetId?: string) {
     setBlocks(current => {
       const moving = current.filter(block => ids.includes(block.id));
