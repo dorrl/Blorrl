@@ -61,27 +61,27 @@ function connectStackAfter(items: Block[], movingIds: string[], targetId: string
   const movingSet = new Set(movingIds);
   if (!movingIds.length || movingIds.includes(targetId)) return items;
 
+  // Nested control-body blocks are stored inside their owner, while canvas
+  // blocks are stored at the root. Read from the canonical graph, then remove
+  // the whole moving thread from either location before reconnecting it.
+  const flat = allBlocks(items);
   const moving = movingIds
-    .map(id => items.find(block => block.id === id))
-    .filter((block): block is Block => !!block && isStackBlock(block));
-  if (!moving.length) return items;
+    .map(id => flat.find(block => block.id === id))
+    .filter((block): block is Block => !!block);
+  if (!moving.length || moving.length !== movingIds.length || moving.some(block => !isStackBlock(block))) return items;
 
-  const rest = items.filter(block => !movingSet.has(block.id));
+  let rest = removeIds(items, movingIds);
   const parentId = targetId === "__start" ? "__start" : targetId;
   if (parentId !== "__start" && !rest.some(block => block.id === parentId)) return items;
 
   // Reconnect the previous next block before attaching the incoming thread.
-  const successor = rest.find(block => block.attachedTo === parentId && isStackBlock(block));
+  const successor = allBlocks(rest).find(block => block.attachedTo === parentId && isStackBlock(block));
   if (successor) {
-    const successorIndex = rest.findIndex(block => block.id === successor.id);
-    if (successorIndex >= 0) {
-      rest[successorIndex] = {
-        ...successor,
-        attachedTo: moving[moving.length - 1]!.id,
-        attachmentType: "stack",
-        attachmentField: undefined,
-      };
-    }
+    rest = updateBlockTree(rest, successor.id, {
+      attachedTo: moving[moving.length - 1]!.id,
+      attachmentType: "stack",
+      attachmentField: undefined,
+    });
   }
 
   const attached = moving.map((block, index) => ({
@@ -91,7 +91,8 @@ function connectStackAfter(items: Block[], movingIds: string[], targetId: string
     attachmentField: undefined,
   }));
   const insertionIndex = parentId === "__start" ? 0 : rest.findIndex(block => block.id === parentId) + 1;
-  rest.splice(Math.max(0, insertionIndex), 0, ...attached);
+  if (parentId !== "__start" && insertionIndex === 0) return items;
+  rest.splice(insertionIndex, 0, ...attached);
   return rest;
 }
 
@@ -699,7 +700,11 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const next: Record<string,{x:number;y:number}> = {...positionsRef.current};
     drag.ids.forEach(item => { const p=drag.origins[item]; next[item]={x:Math.max(12,p.x+dx),y:Math.max(64,p.y+dy)}; });
     const canvas = canvasRef.current;
-    const target = canvas ? Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).filter(el => !drag.ids.includes(el.dataset.blockId ?? "")).map(el => {
+    const target = canvas ? Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).filter(el =>
+      el.parentElement === canvas &&
+      !drag.ids.includes(el.dataset.blockId ?? "") &&
+      !Array.from(reporterKinds).some(kind => el.classList.contains("kind-" + kind))
+    ).map(el => {
       const targetId=el.dataset.blockId!; const p=next[targetId] ?? {x:42,y:104}; const r=el.getBoundingClientRect();
       return {id:targetId,p,dist:Math.hypot(event.clientX-(r.left+r.width/2),event.clientY-r.bottom),below:event.clientY>=r.bottom-10};
     }).filter(item=>item.below&&item.dist<70).sort((a,b)=>a.dist-b.dist)[0] : undefined;
@@ -709,14 +714,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const snapToStart = startTarget && startTarget.dist < 70 && (!target || startTarget.dist < target.dist);
     const snapped = snapToStart ? startTarget : target;
     if (snapped) {
-      setBlocks(current => {
-        const moving=allBlocks(current).filter(b=>drag.ids.includes(b.id));
-        const rest=removeIds(current,drag.ids);
-        const i=snapped.id==="__start" ? -1 : rest.findIndex(b=>b.id===snapped.id);
-        const attached=moving.map((block,index)=>({...block,attachedTo:index===0?(snapped.id==="__start"?"__start":snapped.id):moving[index-1]!.id}));
-        rest.splice(snapped.id==="__start" ? 0 : i<0 ? rest.length : i+1,0,...attached);
-        return rest;
-      });
+      setBlocks(current => connectStackAfter(current, drag.ids, snapped.id));
       const targetEl = snapped.id==="__start" ? startNode : canvas?.querySelector<HTMLElement>(`[data-block-id="${snapped.id}"]`);
       let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 1;
       drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-1; });
