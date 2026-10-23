@@ -30,10 +30,8 @@ function topLevelBlockContaining(canvas: HTMLElement, element: HTMLElement): HTM
   }
   return block?.parentElement === canvas ? block : null;
 }
-function canvasPoint(canvas: HTMLElement, element: HTMLElement) {
-  const canvasRect = canvas.getBoundingClientRect();
-  const rect = element.getBoundingClientRect();
-  return { x: rect.left - canvasRect.left + canvas.scrollLeft, y: rect.top - canvasRect.top + canvas.scrollTop };
+function canvasPoint(element: HTMLElement) {
+  return { x: element.offsetLeft, y: element.offsetTop };
 }
 
 function reflowAttachedStack(items: Block[], current: Record<string, { x: number; y: number }>, canvas: HTMLDivElement | null): Record<string, { x: number; y: number }> {
@@ -327,7 +325,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const ownerId = slot.dataset.valueFor;
           const owner = topLevelBlockContaining(canvas, slot);
           if (!inside || !owner || !ownerId) return null;
-          const point = canvasPoint(canvas, owner);
+          const point = canvasPoint(owner);
           // Anchor the preview at the owner, not at the socket. The ghost is
           // the owner with the incoming reporter inserted, so DOM intrinsic
           // sizing can expand the whole parent before the drop is committed.
@@ -349,7 +347,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const ownerId = slot.dataset.conditionFor;
           const owner = topLevelBlockContaining(canvas, slot);
           if (!inside || !ownerId || !owner) return null;
-          const point = canvasPoint(canvas, owner);
+          const point = canvasPoint(owner);
           return {id:"__condition__:"+ownerId,x:point.x,y:point.y,distance:0,horizontal:true};
         }).find(item => item !== null) ?? null : null;
       const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 20 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
@@ -967,8 +965,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     });
     insertionPreviewElementsRef.current = [];
     const canvasRect = canvas.getBoundingClientRect();
-    // Position the original palette element at the predicted post-drop location.
-    // snapGhost remains target metadata only; no extra preview element is rendered.
+    // The palette element follows the pointer; socket snaps preview the owner block instead.
     const positionOriginalAt = (x: number, y: number) => {
       if (!source) return;
       source.style.opacity = ".58";
@@ -979,13 +976,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const isConditionReporter = ["compare", "true", "false"].includes(kind);
     if (isValueReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
-        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.valueFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(canvas, owner); return {id:`__value__:${ownerId}:${slot.dataset.valueField}`,x:point.x,y:point.y,area:rect.width*rect.height}; })
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.valueFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(owner); return {id:`__value__:${ownerId}:${slot.dataset.valueField}`,x:point.x,y:point.y,area:rect.width*rect.height}; })
         .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
       if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
     if (isConditionReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
-        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.conditionFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(canvas, owner); return {id:`__condition__:${ownerId}`,x:point.x,y:point.y}; })
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.conditionFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(owner); return {id:`__condition__:${ownerId}`,x:point.x,y:point.y}; })
         .find((item): item is {id:string;x:number;y:number} => item !== null);
       if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
