@@ -519,14 +519,9 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     });
     setBlocks(current => {
       if (!beforeId) return [...current, block];
-      if (beforeId === "__start") {
-        const reparented = current.map(item => item.attachedTo === "__start" ? { ...item, attachedTo: block.id } : item);
-        return [block, ...reparented];
-      }
-      const index = current.findIndex(item => item.id === beforeId);
-      if (index < 0) return [...current, block];
-      const reparented = current.map(item => item.attachedTo === beforeId ? { ...item, attachedTo: block.id } : item);
-      return [...reparented.slice(0, index + 1), block, ...reparented.slice(index + 1)];
+      // Palette insertions and canvas drags share the same next-connection rule.
+      const detached = { ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined };
+      return connectStackAfter([...current, detached], [detached.id], beforeId);
     });
     setSelected([block.id]); setStatus("idle");
   }
