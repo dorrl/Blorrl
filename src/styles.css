@@ -2550,3 +2550,75 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .value-slot > .value-chip .block-fields {
   flex-wrap: nowrap;
 }
+
+/* Ghosts use the same nested DOM as real blocks, but without the canvas
+   max-width caps. Intrinsic sizing then propagates reporter width to its owner. */
+.snap-ghost-preview {
+  width: max-content;
+  max-width: none;
+  height: auto;
+  gap: 0;
+  overflow: visible;
+}
+
+.snap-ghost-preview > .ghost-layout,
+.snap-ghost-preview .ghost-layout .block-card {
+  width: max-content !important;
+  min-width: max-content;
+  max-width: none !important;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.snap-ghost-preview .ghost-layout .block-content,
+.snap-ghost-preview .ghost-layout .block-fields,
+.snap-ghost-preview .ghost-layout .value-slot,
+.snap-ghost-preview .ghost-layout .inline-reporter,
+.snap-ghost-preview .ghost-layout .inline-operator-fields {
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.snap-ghost-preview .ghost-layout .block-fields {
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+
+.snap-ghost-preview .ghost-layout .value-slot > .value-chip {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  height: auto;
+  min-height: 30px;
+  max-height: none;
+  flex: 0 0 auto;
+}
+
+/* A nested expression determines the parent's intrinsic width, with the
+   normal block padding/gaps retained instead of overlaying the child. */
+.block-card:not(.value-chip) .block-content:has(.value-slot > .value-chip) {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.block-card:not(.value-chip) .block-fields:has(.value-slot > .value-chip) {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex-wrap: nowrap;
+}
+
+.block-card:not(.value-chip) .value-slot:has(> .value-chip) {
+  margin-inline: 2px;
+}
