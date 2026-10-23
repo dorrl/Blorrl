@@ -2513,3 +2513,40 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   pointer-events: none !important;
   box-shadow: 0 0 0 2px rgba(140, 200, 255, 0.8), 0 6px 18px rgba(0, 0, 0, 0.22);
 }
+
+/* Let socket reporters participate in normal intrinsic sizing instead of
+   clipping nested expressions to the old fixed chip width. */
+.value-slot:has(> .value-chip) {
+  width: max-content;
+  max-width: none;
+  min-width: 0;
+  overflow: visible;
+}
+
+.value-slot > .value-chip {
+  width: max-content;
+  min-width: max-content;
+  max-width: min(480px, calc(100vw - 80px));
+  height: auto;
+  min-height: 30px;
+  max-height: none;
+  flex: 0 0 auto;
+}
+
+.value-slot > .value-chip .block-content,
+.value-slot > .value-chip .block-fields,
+.value-slot > .value-chip .inline-reporter,
+.value-slot > .value-chip .inline-operator-fields {
+  width: max-content;
+  max-width: 100%;
+}
+
+.value-slot > .value-chip .value-slot {
+  width: max-content;
+  max-width: none;
+  min-width: 0;
+}
+
+.value-slot > .value-chip .block-fields {
+  flex-wrap: nowrap;
+}
