@@ -2383,8 +2383,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   pointer-events: none;
-  opacity: 0.68;
-  filter: saturate(0.82);
+  opacity: 1;
+  filter: none;
   contain: layout style;
 }
 .snap-ghost-preview > .block-card {
