@@ -307,7 +307,26 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const canBeCondition = !!movingElementForSocket && ["kind-true","kind-false","kind-compare"].some(kind => movingElementForSocket.classList.contains(kind));
       const canBeValue = !!movingElementForSocket && ["kind-add","kind-compare","kind-true","kind-false","kind-get"].some(kind=>movingElementForSocket.classList.contains(kind));
       const valueCandidate = canBeValue ? Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
-        .map(slot=>{const rect=slot.getBoundingClientRect();const inside=event.clientX>=rect.left-4&&event.clientX<=rect.right+4&&event.clientY>=rect.top-4&&event.clientY<=rect.bottom+4;return inside?{id:"__value__:"+slot.dataset.valueFor+":"+slot.dataset.valueField,x:rect.left-canvasRect.left+canvas.scrollLeft+rect.width/2-(movingElementForSocket?.getBoundingClientRect().width??0)/2,y:rect.top-canvasRect.top+canvas.scrollTop+rect.height/2-(movingElementForSocket?.getBoundingClientRect().height??0)/2,distance:0,horizontal:true,area:rect.width*rect.height}:null;}).filter((item):item is {id:string;x:number;y:number;distance:number;horizontal:boolean;area:number}=>item!==null).sort((a,b)=>a.area-b.area)[0]??null:null;
+        .map(slot => {
+          const rect = slot.getBoundingClientRect();
+          const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
+          const ownerId = slot.dataset.valueFor;
+          const owner = ownerId ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`) : null;
+          if (!inside || !owner || !ownerId) return null;
+          // Anchor the preview at the owner, not at the socket. The ghost is
+          // the owner with the incoming reporter inserted, so DOM intrinsic
+          // sizing can expand the whole parent before the drop is committed.
+          return {
+            id: "__value__:" + ownerId + ":" + slot.dataset.valueField,
+            x: owner.offsetLeft,
+            y: owner.offsetTop,
+            distance: 0,
+            horizontal: true,
+            area: rect.width * rect.height,
+          };
+        })
+        .filter((item): item is {id:string;x:number;y:number;distance:number;horizontal:boolean;area:number} => item !== null)
+        .sort((a,b) => a.area-b.area)[0] ?? null : null;
       const conditionCandidate = canBeCondition ? Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
         .map(slot => {
           const rect = slot.getBoundingClientRect();
@@ -521,29 +540,39 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
 
   useEffect(() => {
     const container = snapGhostContentRef.current;
+    const canvas = canvasRef.current;
     if (!container) return;
     container.replaceChildren();
-    if (!snapGhost || !canvasRef.current) return;
+    if (!snapGhost || !canvas || libraryDragKind || !dragPreview) return;
 
-    if (libraryDragKind) return;
-    if (!dragPreview) return;
-    dragPreview.ids.forEach((id, index) => {
-      const source = Array.from(canvasRef.current!.querySelectorAll<HTMLElement>(".block-card[data-block-id]")).find(element => element.dataset.blockId === id);
-      if (!source) return;
-      const clone = source.cloneNode(true) as HTMLElement;
+    const findBlockElement = (id: string) =>
+      Array.from(canvas.querySelectorAll<HTMLElement>(".block-card[data-block-id]"))
+        .find(element => element.dataset.blockId === id) ?? null;
+
+    const sanitizeGhost = (clone: HTMLElement, index = 0) => {
       clone.classList.remove("selected", "ghost-source-hidden");
+      clone.classList.add("ghost-layout");
       clone.removeAttribute("data-block-id");
       clone.removeAttribute("data-drop-into");
       clone.setAttribute("aria-hidden", "true");
       clone.setAttribute("inert", "");
-      clone.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(element => { element.removeAttribute("data-block-id"); element.removeAttribute("data-drop-into"); });
+      clone.querySelectorAll<HTMLElement>("[data-block-id], [data-drop-into]").forEach(element => {
+        element.removeAttribute("data-block-id");
+        element.removeAttribute("data-drop-into");
+      });
       clone.querySelectorAll(".delete-block").forEach(element => element.remove());
-      clone.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => { element.setAttribute("disabled", ""); element.setAttribute("tabindex", "-1"); });
-      clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => { element.style.position = "relative"; element.style.left = "auto"; element.style.top = "auto"; element.style.transform = "none"; element.style.zIndex = "auto"; });
-      // The ghost must size as a complete DOM subtree. Clear the canvas
-      // width caps on the cloned root and every nested reporter; otherwise a
-      // child can grow while its parent remains constrained to the old width.
-      clone.classList.add("ghost-layout");
+      clone.querySelectorAll<HTMLElement>("input,button,select,textarea").forEach(element => {
+        element.setAttribute("disabled", "");
+        element.setAttribute("tabindex", "-1");
+      });
+      clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => {
+        Object.assign(element.style, {
+          position: "relative", left: "auto", top: "auto", right: "auto", bottom: "auto",
+          transform: "none", zIndex: "auto", width: "max-content", minWidth: "0",
+          maxWidth: "none", height: "auto", minHeight: "0", maxHeight: "none",
+          flex: "0 0 auto", flexShrink: "0", overflow: "visible",
+        });
+      });
       Object.assign(clone.style, {
         position: "relative", left: "auto", top: "auto", right: "auto", bottom: "auto",
         transform: "none", zIndex: "auto", width: "max-content", minWidth: "max-content",
@@ -551,66 +580,41 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         flex: "0 0 auto", boxSizing: "border-box", marginTop: index ? "-1px" : "0",
         pointerEvents: "none",
       });
-      clone.querySelectorAll<HTMLElement>(".block-card, .block-content, .block-fields, .value-slot, .inline-reporter, .inline-operator-fields").forEach(element => {
+      clone.querySelectorAll<HTMLElement>(".block-content, .block-fields, .value-slot, .inline-reporter, .inline-operator-fields").forEach(element => {
         Object.assign(element.style, {
           width: "max-content", minWidth: "0", maxWidth: "none", height: "auto",
           minHeight: "0", maxHeight: "none", flexShrink: "0", overflow: "visible",
         });
       });
-      clone.querySelectorAll<HTMLElement>(".block-card").forEach(element => {
-        element.style.flex = "0 0 auto";
-        element.style.marginRight = "0";
+      clone.querySelectorAll<HTMLElement>(".block-fields").forEach(element => {
+        element.style.flexWrap = "nowrap";
+        element.style.gap = "7px";
       });
-      container.appendChild(clone);
+      return clone;
+    };
+
+    if (snapGhost.targetId.startsWith("__value__:")) {
+      const [, ownerId, field] = snapGhost.targetId.split(":");
+      const owner = ownerId ? findBlockElement(ownerId) : null;
+      const incoming = dragPreview.ids.length === 1 ? findBlockElement(dragPreview.ids[0]!) : null;
+      if (!owner || !incoming || (field !== "valueBlock" && field !== "rightBlock")) return;
+
+      const ownerClone = owner.cloneNode(true) as HTMLElement;
+      const incomingClone = incoming.cloneNode(true) as HTMLElement;
+      const slot = Array.from(ownerClone.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
+        .find(element => element.dataset.valueFor === ownerId && element.dataset.valueField === field);
+      if (!slot) return;
+      slot.replaceChildren(sanitizeGhost(incomingClone));
+      container.appendChild(sanitizeGhost(ownerClone));
+      return;
+    }
+
+    dragPreview.ids.forEach((id, index) => {
+      const source = findBlockElement(id);
+      if (!source) return;
+      container.appendChild(sanitizeGhost(source.cloneNode(true) as HTMLElement, index));
     });
   }, [snapGhost?.targetId, dragPreview?.ids.join(","), libraryDragKind]);
-
-  function updateBlock(id: string, patch: Partial<Block>) {
-    setBlocks(current => updateBlockTree(current, id, patch));
-    setStatus("idle");
-  }
-  function addBlock(kind: BlockKind, beforeId?: string, dropPoint?: {x:number;y:number}) {
-    const attached = getStartAttachedBlocks(blocks);
-    const lastAttached = attached[attached.length - 1];
-    const block = createBlock(kind);
-    block.attachedTo = beforeId === "__start" ? "__start" : beforeId ?? (dropPoint ? undefined : lastAttached?.id ?? "__start");
-    block.attachmentType = block.attachedTo ? "stack" : undefined;
-    block.attachmentField = undefined;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    const targetIndex = beforeId && beforeId !== "__start" ? blocks.findIndex(item => item.id === beforeId) : -1;
-    const targetPosition = beforeId === "__start" ? {x:42,y:38} : beforeId ? positions[beforeId] ?? {x:42,y:90 + Math.max(0,targetIndex)*86} : undefined;
-    const targetElement = beforeId === "__start" ? canvasRef.current?.querySelector<HTMLElement>(".start-node") : beforeId ? canvasRef.current?.querySelector<HTMLElement>(`.block-card[data-block-id="${beforeId}"]`) : undefined;
-    const insertY = targetPosition ? targetPosition.y + (targetElement?.offsetHeight ?? 88) - 1 : dropPoint?.y ?? 90 + blocks.length*95;
-    const preview = document.querySelector<HTMLElement>(`.library-block-preview.kind-${kind}`);
-    const previewScale = preview ? Number.parseFloat(getComputedStyle(preview).getPropertyValue("--palette-preview-scale")) || 1 : 1;
-    const measuredHeight = preview ? preview.getBoundingClientRect().height / previewScale : Number.NaN;
-    const blockHeight = Number.isFinite(measuredHeight) && measuredHeight > 0
-      ? measuredHeight
-      : kind === "if" || kind === "repeat" ? 90
-      : kind === "compare" ? 42
-      : kind === "add" || kind === "true" || kind === "false" || kind === "get" ? 38
-      : 88;
-    setPositions(current => {
-      const next = {...current,[block.id]:beforeId && targetPosition ? {x:targetPosition.x,y:insertY} : dropPoint ?? {x:42 + Math.max(0,(rect?.width ?? 700)*0.06),y:insertY}};
-      if (beforeId && targetPosition) {
-        const successorIds = new Set(getAttachedSuccessorIds(blocks, beforeId));
-        blocks.forEach((item,index) => {
-          if (!successorIds.has(item.id)) return;
-          const point = current[item.id] ?? {x:42,y:90 + index * 86};
-          next[item.id] = {x:point.x,y:point.y+blockHeight-1};
-        });
-      }
-      return next;
-    });
-    setBlocks(current => {
-      if (!beforeId) return [...current, block];
-      // Palette insertions and canvas drags share the same next-connection rule.
-      const detached = { ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined };
-      return connectStackAfter([...current, detached], [detached.id], beforeId);
-    });
-    setSelected([block.id]); setStatus("idle");
-  }
-
   function startReporterPointerDrag(event: ReactPointerEvent<HTMLSpanElement>, id: string) {
     if (spaceDown || event.button !== 0 || (event.target as HTMLElement).closest("input,button,select,textarea")) return;
     event.preventDefault();
