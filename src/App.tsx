@@ -21,6 +21,20 @@ type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; ki
 type BlockPointerDrag = { pointerId: number; startX: number; startY: number; ids: string[]; origins: Record<string, { x: number; y: number }> };
 type SnapGhost = { x: number; y: number; count: number; targetId: string };
 function categoryClass(kind: BlockKind) { return "category-" + (catalog.find(item => item.kind === kind)?.category ?? "Values").toLowerCase(); }
+function topLevelBlockContaining(canvas: HTMLElement, element: HTMLElement): HTMLElement | null {
+  let block = element.closest<HTMLElement>(".block-card[data-block-id]");
+  while (block && block.parentElement !== canvas) {
+    const parent = block.parentElement?.closest<HTMLElement>(".block-card[data-block-id]");
+    if (!parent || parent === block) break;
+    block = parent;
+  }
+  return block?.parentElement === canvas ? block : null;
+}
+function canvasPoint(canvas: HTMLElement, element: HTMLElement) {
+  const canvasRect = canvas.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left - canvasRect.left + canvas.scrollLeft, y: rect.top - canvasRect.top + canvas.scrollTop };
+}
 
 function reflowAttachedStack(items: Block[], current: Record<string, { x: number; y: number }>, canvas: HTMLDivElement | null): Record<string, { x: number; y: number }> {
   if (!canvas) return current;
@@ -311,15 +325,16 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const rect = slot.getBoundingClientRect();
           const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
           const ownerId = slot.dataset.valueFor;
-          const owner = ownerId ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`) : null;
+          const owner = topLevelBlockContaining(canvas, slot);
           if (!inside || !owner || !ownerId) return null;
+          const point = canvasPoint(canvas, owner);
           // Anchor the preview at the owner, not at the socket. The ghost is
           // the owner with the incoming reporter inserted, so DOM intrinsic
           // sizing can expand the whole parent before the drop is committed.
           return {
             id: "__value__:" + ownerId + ":" + slot.dataset.valueField,
-            x: owner.offsetLeft,
-            y: owner.offsetTop,
+            x: point.x,
+            y: point.y,
             distance: 0,
             horizontal: true,
             area: rect.width * rect.height,
@@ -332,8 +347,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const rect = slot.getBoundingClientRect();
           const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4;
           const ownerId = slot.dataset.conditionFor;
-          const owner = ownerId ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`) : null;
-          return inside && ownerId && owner ? {id:"__condition__:"+ownerId,x:owner.offsetLeft,y:owner.offsetTop,distance:0,horizontal:true} : null;
+          const owner = topLevelBlockContaining(canvas, slot);
+          if (!inside || !ownerId || !owner) return null;
+          const point = canvasPoint(canvas, owner);
+          return {id:"__condition__:"+ownerId,x:point.x,y:point.y,distance:0,horizontal:true};
         }).find(item => item !== null) ?? null : null;
       const snap = valueCandidate ?? conditionCandidate ?? (startCandidate && startCandidate.distance < 20 && startCandidate.horizontal && (!candidate || startCandidate.distance < candidate.distance)
         ? startCandidate
@@ -569,7 +586,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const chip = document.createElement("span");
       chip.className = "block-card value-block-model value-chip " + categoryClass(kind) + " kind-" + kind;
       const content = document.createElement("span"); content.className = "block-content";
-      const clonedFields = fields.cloneNode(true) as HTMLElement; clonedFields.className = "block-fields";
+      const clonedFields = document.createElement("span"); clonedFields.className = "block-fields";
+      Array.from(fields.childNodes).forEach(node => clonedFields.append(node.cloneNode(true)));
       content.append(clean(clonedFields)); chip.append(content);
       return layoutRoot(chip);
     };
@@ -578,9 +596,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const conditionSocket = snapGhost.targetId.startsWith("__condition__:");
     if (valueSocket || conditionSocket) {
       const [, ownerId, field] = snapGhost.targetId.split(":");
-      const owner = ownerId ? findBlock(ownerId) : null;
       const source = sourceFor(dragPreview?.ids.length === 1 ? dragPreview.ids[0]! : "");
-      if (!owner || !source) return;
+      const targetSelector = valueSocket
+        ? `.value-slot[data-value-for="${ownerId}"][data-value-field="${field}"]`
+        : `.condition-slot[data-condition-for="${ownerId}"]`;
+      const targetSlot = Array.from(canvas.querySelectorAll<HTMLElement>(targetSelector))[0];
+      const owner = targetSlot ? topLevelBlockContaining(canvas, targetSlot) : null;
+      if (!owner || !source || !ownerId) return;
       const ownerClone = layoutRoot(owner.cloneNode(true) as HTMLElement);
       const kind = libraryDragKind ?? (source.className.match(/\bkind-([\w-]+)/)?.[1] as BlockKind | undefined);
       if (!kind) return;
@@ -597,7 +619,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         else if (kind === "compare") {
           const fields = source.querySelector<HTMLElement>(".inline-operator-fields");
           if (!fields) return;
-          slot.replaceChildren(clean(fields.cloneNode(true) as HTMLElement));
+          slot.replaceChildren(...Array.from(fields.childNodes, node => node.cloneNode(true)));
         } else return;
       }
       container.append(ownerClone);
@@ -957,13 +979,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const isConditionReporter = ["compare", "true", "false"].includes(kind);
     if (isValueReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]"))
-        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.valueFor; const owner = ownerId ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`) : null; return inside && ownerId && owner ? {id:`__value__:${ownerId}:${slot.dataset.valueField}`,x:owner.offsetLeft,y:owner.offsetTop,area:rect.width*rect.height} : null; })
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.valueFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(canvas, owner); return {id:`__value__:${ownerId}:${slot.dataset.valueField}`,x:point.x,y:point.y,area:rect.width*rect.height}; })
         .filter((item): item is {id:string;x:number;y:number;area:number} => item !== null).sort((a,b)=>a.area-b.area)[0];
       if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
     if (isConditionReporter) {
       const socket = Array.from(canvas.querySelectorAll<HTMLElement>(".condition-slot[data-condition-for]"))
-        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.conditionFor; const owner = ownerId ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${ownerId}"]`) : null; return inside && ownerId && owner ? {id:`__condition__:${ownerId}`,x:owner.offsetLeft,y:owner.offsetTop} : null; })
+        .map(slot => { const rect = slot.getBoundingClientRect(); const inside = event.clientX >= rect.left - 4 && event.clientX <= rect.right + 4 && event.clientY >= rect.top - 4 && event.clientY <= rect.bottom + 4; const ownerId = slot.dataset.conditionFor; const owner = topLevelBlockContaining(canvas, slot); if (!inside || !ownerId || !owner) return null; const point = canvasPoint(canvas, owner); return {id:`__condition__:${ownerId}`,x:point.x,y:point.y}; })
         .find((item): item is {id:string;x:number;y:number} => item !== null);
       if (socket) { const ghost = {...socket,count:1,targetId:socket.id}; if (source) source.style.opacity = "0"; if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost); snapGhostRef.current = ghost; return; }
     }
