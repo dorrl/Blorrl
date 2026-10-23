@@ -426,8 +426,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
             element.style.transform = `translate(${slotRect.left - sourceRect.left}px, ${slotRect.top - sourceRect.top}px)`;
           } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (ghost) {
-          const origin = drag.origins[id];
-          element.style.transform = `translate(${ghost.x - (origin?.x ?? element.offsetLeft)}px, ${ghost.y + stackOffset - (origin?.y ?? element.offsetTop)}px)`;
+          element.style.transform = `translate(${ghost.x - element.offsetLeft}px, ${ghost.y + stackOffset - element.offsetTop}px)`;
           stackOffset += element.offsetHeight - 1;
         } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         element.style.opacity = "1";
