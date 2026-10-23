@@ -693,6 +693,11 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     });
     setPositions(current=>{const next={...current};ids.forEach(id=>delete next[id]);return next;});setStatus("idle");
   }
+  function updateBlock(id: string, patch: Partial<Block>) {
+    setBlocks(current => updateBlockTree(current, id, patch));
+    setStatus("idle");
+  }
+
   function updateType(id: string, type: ValueType, checked: boolean) {
     const block = allBlocks(blocks).find(b => b.id === id);
     if (!block) return;
