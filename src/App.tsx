@@ -46,6 +46,55 @@ function reflowAttachedStack(items: Block[], current: Record<string, { x: number
   return next;
 }
 
+const reporterKinds = new Set<BlockKind>(["add", "compare", "true", "false", "get"]);
+
+function isStackBlock(block: Block): boolean {
+  return block.attachmentType !== "value" && block.attachmentType !== "condition" && !reporterKinds.has(block.kind);
+}
+
+/**
+ * Apply an Entry-style next-connection operation to the flat canvas graph.
+ * The dragged thread is moved as one unit and the target's old successor is
+ * reconnected to the incoming thread's tail.
+ */
+function connectStackAfter(items: Block[], movingIds: string[], targetId: string): Block[] {
+  const movingSet = new Set(movingIds);
+  if (!movingIds.length || movingIds.includes(targetId)) return items;
+
+  const moving = movingIds
+    .map(id => items.find(block => block.id === id))
+    .filter((block): block is Block => !!block && isStackBlock(block));
+  if (!moving.length) return items;
+
+  const rest = items.filter(block => !movingSet.has(block.id));
+  const parentId = targetId === "__start" ? "__start" : targetId;
+  if (parentId !== "__start" && !rest.some(block => block.id === parentId)) return items;
+
+  // Reconnect the previous next block before attaching the incoming thread.
+  const successor = rest.find(block => block.attachedTo === parentId && isStackBlock(block));
+  if (successor) {
+    const successorIndex = rest.findIndex(block => block.id === successor.id);
+    if (successorIndex >= 0) {
+      rest[successorIndex] = {
+        ...successor,
+        attachedTo: moving[moving.length - 1]!.id,
+        attachmentType: "stack",
+        attachmentField: undefined,
+      };
+    }
+  }
+
+  const attached = moving.map((block, index) => ({
+    ...block,
+    attachedTo: index === 0 ? parentId : moving[index - 1]!.id,
+    attachmentType: "stack" as const,
+    attachmentField: undefined,
+  }));
+  const insertionIndex = parentId === "__start" ? 0 : rest.findIndex(block => block.id === parentId) + 1;
+  rest.splice(Math.max(0, insertionIndex), 0, ...attached);
+  return rest;
+}
+
 /** EntryJS-style stack connection: only the actual successor thread moves on insertion. */
 function getAttachedSuccessorIds(items: Block[], parentId: string): string[] {
   const result: string[] = [];
@@ -330,31 +379,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         drag.ids.forEach(id => delete next[id]);
         setSelected(drag.ids.slice(0,1));
       } else if (ghost) {
-        setBlocks(current => {
-          const moving = drag.ids
-            .map(id => current.find(block => block.id === id))
-            .filter((block): block is Block => !!block);
-          const rest = current.filter(block => !drag.ids.includes(block.id));
-          const parentId = ghost.targetId === "__start" ? "__start" : ghost.targetId;
-          const targetIndex = ghost.targetId === "__start" ? -1 : rest.findIndex(block => block.id === ghost.targetId);
-          // Preserve the old successor: after inserting a stack, it must follow
-          // the inserted stack's tail, not compete with its first block for parentId.
-          if (moving.length) {
-            for (let index = 0; index < rest.length; index++) {
-              if (rest[index]!.attachedTo === parentId) {
-                rest[index] = { ...rest[index]!, attachedTo: moving[moving.length - 1]!.id };
-              }
-            }
-          }
-          const attached = moving.map((block, index) => ({
-            ...block,
-            attachedTo: index === 0 ? parentId : moving[index - 1]!.id,
-            attachmentType: "stack" as const,
-            attachmentField: undefined,
-          }));
-          rest.splice(ghost.targetId === "__start" ? 0 : targetIndex < 0 ? rest.length : targetIndex + 1, 0, ...attached);
-          return rest;
-        });
+        setBlocks(current => connectStackAfter(current, drag.ids, ghost.targetId));
         // Materialize fallback layout positions before shifting, otherwise blocks
         // without an explicit entry in positions keep their old index-based location.
         blocksRef.current.forEach((block, index) => {
@@ -384,7 +409,9 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         });
         // Detach only the dragged stack root; its descendants remain connected to each other.
         const rootId = drag.ids[0];
-        setBlocks(current => current.map(block => block.id === rootId ? ({ ...block, attachedTo: undefined }) : block));
+        setBlocks(current => current.map(block => block.id === rootId
+          ? ({ ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined })
+          : block));
       }
 
       setPositions(next);
@@ -699,7 +726,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       let y = snapped.p.y + (targetEl?.offsetHeight ?? 50) - 1;
       drag.ids.forEach(item => { next[item]={x:snapped.p.x,y}; y += (canvas?.querySelector<HTMLElement>(`[data-block-id="${item}"]`)?.offsetHeight ?? 92)-1; });
     } else {
-      setBlocks(current => { const moving=allBlocks(current).filter(block=>drag.ids.includes(block.id)); return moving.length ? [...removeIds(current,drag.ids),...moving.map(block=>({...block,attachedTo:undefined}))] : current; });
+      setBlocks(current => { const moving=allBlocks(current).filter(block=>drag.ids.includes(block.id)); return moving.length ? [...removeIds(current,drag.ids),...moving.map(block=>({...block,attachedTo:undefined,attachmentType:undefined,attachmentField:undefined}))] : current; });
     }
     setPositions(next);
     setStatus("idle");
