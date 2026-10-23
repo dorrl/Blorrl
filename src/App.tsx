@@ -153,16 +153,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const blockPointerDrag = useRef<BlockPointerDrag | null>(null);
   const blockDragMoved = useRef(false);
   const [dragPreview, setDragPreview] = useState<{ids:string[]}|null>(null);
-  const [libraryDragKind, setLibraryDragKind] = useState<BlockKind | null>(null);
   const libraryDragElementRef = useRef<HTMLElement | null>(null);
   const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
   const socketPreviewOwnerRef = useRef<{element: HTMLElement; width: string; minWidth: string; boxSizing: string} | null>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
-  const [snapGhost, setSnapGhost] = useState<SnapGhost | null>(null);
   const snapGhostRef = useRef<SnapGhost | null>(null);
-  snapGhostRef.current = snapGhost;
   const resizeOrigin = useRef<{y:number;ratio:number}|null>(null);
   const sidebarResizeOrigin = useRef<{x:number;width:number}|null>(null);
   const positionsRef = useRef(positions);
@@ -436,7 +433,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         element.style.opacity = "1";
       });
       const previousGhost = snapGhostRef.current;
-      if (!ghost || !previousGhost || ghost.targetId !== previousGhost.targetId || ghost.x !== previousGhost.x || ghost.y !== previousGhost.y) setSnapGhost(ghost);
+      
       snapGhostRef.current = ghost;
       if (Math.hypot(dx, dy) > 3) event.preventDefault();
     };
@@ -536,7 +533,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       setDragCanvasExtent(0);
       if (ghost) setStatus("idle");
       snapGhostRef.current = null;
-      setSnapGhost(null);
+      
     };
 
     let moveFrame = 0;
@@ -596,7 +593,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       origins: { [id]: point },
     };
     snapGhostRef.current = null;
-    setSnapGhost(null);
+    
     source.setPointerCapture(event.pointerId);
   }
 
@@ -752,12 +749,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         });
       }
       libraryDragKindRef.current = payload.kind;
-      setLibraryDragKind(payload.kind);
+      
       snapGhostRef.current = null;
-      setSnapGhost(null);
+      
     } else {
       libraryDragKindRef.current = null;
-      setLibraryDragKind(null);
+      
       restoreLibraryDragElement();
     }
     if (payload.source === "canvas") {
@@ -809,7 +806,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         drag.ids.forEach(id => { next[id] = point; });
         return next;
       });
-      setSnapGhost(null);
+      
       snapGhostRef.current = null;
       setStatus("idle");
       return;
@@ -843,7 +840,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         drag.ids.forEach(id => { next[id] = point; });
         return next;
       });
-      setSnapGhost(null);
+      
       snapGhostRef.current = null;
       setStatus("idle");
       return;
@@ -940,7 +937,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
             owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
           }
         }
-        if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+        
         snapGhostRef.current = ghost; return;
       }
     }
@@ -962,7 +959,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
             owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
           }
         }
-        if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+        
         snapGhostRef.current = ghost; return;
       }
     }
@@ -977,7 +974,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     if (isValueReporter) {
       const ghost = freeGhost();
       positionOriginalAt(ghost.x, ghost.y);
-      if (snapGhostRef.current?.targetId !== ghost.targetId || snapGhostRef.current.x !== ghost.x || snapGhostRef.current.y !== ghost.y) setSnapGhost(ghost);
+      
       snapGhostRef.current = ghost;
       return;
     }
@@ -1033,7 +1030,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       });
     }
     const previous = snapGhostRef.current;
-    if (!previous || previous.targetId !== nextGhost.targetId || previous.x !== nextGhost.x || previous.y !== nextGhost.y) setSnapGhost(nextGhost);
+    
     snapGhostRef.current = nextGhost;
   }
   function onLibraryDragEnd() {
@@ -1044,10 +1041,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     insertionPreviewElementsRef.current = [];
     restoreSocketPreviewOwner();
     libraryDragKindRef.current = null;
-    setLibraryDragKind(null);
+    
     restoreLibraryDragElement();
     snapGhostRef.current = null;
-    setSnapGhost(null);
+    
   }
   function onDrop(event: DragEvent, targetId?: string) {
     event.preventDefault(); event.stopPropagation();
@@ -1059,10 +1056,10 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const explicitSocketTarget = targetId?.startsWith("value:") || targetId?.startsWith("condition:") ? targetId : undefined;
     const resolvedTargetId = explicitSocketTarget ?? (ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId);
     libraryDragKindRef.current = null;
-    setLibraryDragKind(null);
+    
     restoreSocketPreviewOwner();
     restoreLibraryDragElement();
-    const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;setSnapGhost(null);return;}
+    const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;return;}
     try {
       const payload=JSON.parse(raw) as DragPayload;
       const valueTarget = resolvedTargetId?.startsWith("value:") ? resolvedTargetId.slice("value:".length).split(":") : undefined;
@@ -1122,7 +1119,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         } else moveSelection(payload.ids,targetId);
       }
     } catch { /* Ignore invalid drag payloads. */ }
-    finally { snapGhostRef.current = null; setSnapGhost(null); }
+    finally { snapGhostRef.current = null;  }
   }
   function selectBlock(_event: MouseEvent, id: string) {
     setSelected([id]);
@@ -1190,7 +1187,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       setSelected(normalizedBlocks[0] ? [normalizedBlocks[0].id] : []);
       if (Number.isFinite(project.workspace.workspaceRatio)) setWorkspaceRatio(Math.max(30, Math.min(85, project.workspace.workspaceRatio)));
       if (Number.isFinite(project.workspace.sidebarWidth)) setSidebarWidth(Math.max(150, Math.min(420, project.workspace.sidebarWidth)));
-      setTypePanelFor(null); setSnapGhost(null); snapGhostRef.current = null;
+      setTypePanelFor(null);  snapGhostRef.current = null;
       setOutput("Loaded " + file.name); setStatus("idle");
     } catch (error) { setOutput(error instanceof Error ? error.message : "Could not open project file."); setStatus("error"); }
   }
@@ -1215,7 +1212,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         <div className="breadcrumb"><span>main.blorr</span><span>›</span><span>main</span><span className="breadcrumb-right">{totalBlocks} blocks</span></div>
         <div className="pane-heading"><div><span className="pane-eyebrow">VISUAL EDITOR</span><h1>Program flow</h1></div><div className="pane-tools"><span className="saved-indicator"><span/> All changes local</span></div></div>
         {showHelp && <div className="help-panel"><strong>Quick language guide</strong><p>Space + drag or Shift + mouse wheel pans the canvas. Drag blocks to move them. Only one block can be selected at a time. Statement blocks snap into stacks; Calculate, ==, and variable getter blocks go into value sockets. Dragging a statement block carries the blocks connected below it. Delete/Backspace removes selected blocks.</p><code>print "hello";</code></div>}
-        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => { e.preventDefault(); handleLibraryDragOver(e); }} onDragLeave={e => { if (!canvasRef.current?.contains(e.relatedTarget as Node)) { snapGhostRef.current=null; setSnapGhost(null); } }} onDrop={e => onDrop(e)} onWheel={event => { if (event.shiftKey && canvasRef.current) { canvasRef.current.scrollLeft += event.deltaY; event.preventDefault(); } }}>
+        <div className={"block-canvas " + (spaceDown ? "space-pan " : "") + (dragPreview ? "dragging-block" : "")} ref={canvasRef} onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture} onDragOver={e => { e.preventDefault(); handleLibraryDragOver(e); }} onDragLeave={e => { if (!canvasRef.current?.contains(e.relatedTarget as Node)) { snapGhostRef.current=null;  } }} onDrop={e => onDrop(e)} onWheel={event => { if (event.shiftKey && canvasRef.current) { canvasRef.current.scrollLeft += event.deltaY; event.preventDefault(); } }}>
           <div className="canvas-ruler"><span>PROGRAM ENTRY</span><span>{spaceDown ? "SPACE + DRAG TO PAN" : "DRAG BLOCKS TO MOVE"}</span></div>
           <div className="start-node" style={{left:42,top:38}} onDragOver={handleLibraryDragOver}><span className="start-play"><Play size={13} fill="currentColor"/></span><div><strong>Start</strong><small>Program entry point</small></div><span className="fixed-pill"></span></div>
           <div className="flow-stem"><span/></div>
@@ -1257,7 +1254,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
             setDragPreview({ids});
             blockPointerDrag.current = {pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,ids,origins};
             snapGhostRef.current = null;
-            setSnapGhost(null);
+            
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           }} onClick={e => selectBlock(e,block.id)} onDragOver={e => {e.preventDefault();e.dataTransfer.dropEffect="move";e.currentTarget.classList.add("drop-target");handleLibraryDragOver(e);}} onDragLeave={e => e.currentTarget.classList.remove("drop-target")} onDrop={e => {e.currentTarget.classList.remove("drop-target");onDrop(e,block.id);}}>
               <div className="block-gutter"><GripVertical size={14}/><span>{String(index+1).padStart(2,"0")}</span></div>
