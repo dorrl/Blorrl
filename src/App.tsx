@@ -696,6 +696,41 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       setStatus("idle");
       return;
     }
+    // Reporters are values, not statement-stack connections. If a native
+    // drag ends outside a compatible socket, promote the reporter to a loose
+    // canvas block rather than snapping it onto a statement thread.
+    const draggedBlocks = allBlocks(blocks).filter(block => drag.ids.includes(block.id));
+    if (draggedBlocks.some(block => reporterKinds.has(block.kind))) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const point = {
+        x: Math.max(12, event.clientX - rect.left + canvas.scrollLeft - 10),
+        y: Math.max(64, event.clientY - rect.top + canvas.scrollTop - 15),
+      };
+      setBlocks(current => {
+        const moving = allBlocks(current).filter(block => drag.ids.includes(block.id));
+        return [
+          ...removeIds(current, drag.ids),
+          ...moving.map(block => ({
+            ...block,
+            attachedTo: undefined,
+            attachmentType: undefined,
+            attachmentField: undefined,
+          })),
+        ];
+      });
+      setPositions(current => {
+        const next = { ...current };
+        drag.ids.forEach(id => { next[id] = point; });
+        return next;
+      });
+      setSnapGhost(null);
+      snapGhostRef.current = null;
+      setStatus("idle");
+      return;
+    }
+
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     const next: Record<string,{x:number;y:number}> = {...positionsRef.current};
     drag.ids.forEach(item => { const p=drag.origins[item]; next[item]={x:Math.max(12,p.x+dx),y:Math.max(64,p.y+dy)}; });
