@@ -14,6 +14,7 @@ import { initialBlocks } from "./editor/initialBlocks";
 import { catalog } from "./editor/blockCatalog";
 import { allBlocks, getStartAttachedBlocks, normalizeBlockGraph, putCondition, putValue, removeIds } from "./editor/blockTree";
 import { createBlock, updateBlockTree } from "./editor/blockOperations";
+import { validateBlockGraph } from "./editor/blockGraphValidation";
 import { useCanvasPan } from "./editor/useCanvasPan";
 
 type DragPayload = { source: "canvas"; ids: string[] } | { source: "library"; kind: BlockKind };
@@ -93,7 +94,8 @@ function connectStackAfter(items: Block[], movingIds: string[], targetId: string
   const insertionIndex = parentId === "__start" ? 0 : rest.findIndex(block => block.id === parentId) + 1;
   if (parentId !== "__start" && insertionIndex === 0) return items;
   rest.splice(insertionIndex, 0, ...attached);
-  return rest;
+  // Reject malformed proposals atomically; the current graph remains untouched.
+  return validateBlockGraph(rest).valid ? rest : items;
 }
 
 /** EntryJS-style stack connection: only the actual successor thread moves on insertion. */
