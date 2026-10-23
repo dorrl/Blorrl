@@ -585,7 +585,8 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       chip.className = "block-card value-block-model value-chip " + categoryClass(kind) + " kind-" + kind;
       const content = document.createElement("span"); content.className = "block-content";
       const clonedFields = document.createElement("span"); clonedFields.className = "block-fields";
-      Array.from(fields.childNodes).forEach(node => clonedFields.append(node.cloneNode(true)));
+      if (kind === "true" || kind === "false") clonedFields.textContent = kind;
+      else Array.from(fields.childNodes).forEach(node => clonedFields.append(node.cloneNode(true)));
       content.append(clean(clonedFields)); chip.append(content);
       return layoutRoot(chip);
     };
