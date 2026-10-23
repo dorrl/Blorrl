@@ -316,7 +316,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       if (snap?.id.startsWith("__value__:")) {
         const [, ownerId, field] = snap.id.split(":");
         if (draggedBlock && ownerId && (field === "valueBlock" || field === "rightBlock")) {
-          const proposed = putValue(removeIds(graphBeforeDrop, drag.ids), ownerId, field, draggedBlock);
+          const proposed = putValue(graphBeforeDrop, ownerId, field, draggedBlock);
           connectionValid = allBlocks(proposed).some(block =>
             block.id === draggedBlock.id && block.attachedTo === ownerId &&
             block.attachmentType === "value" && block.attachmentField === field
@@ -325,7 +325,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       } else if (snap?.id.startsWith("__condition__:")) {
         const ownerId = snap.id.slice("__condition__:".length);
         if (draggedBlock && ownerId) {
-          const proposed = putCondition(removeIds(graphBeforeDrop, drag.ids), ownerId, draggedBlock);
+          const proposed = putCondition(graphBeforeDrop, ownerId, draggedBlock);
           connectionValid = allBlocks(proposed).some(block =>
             block.id === draggedBlock.id && block.attachedTo === ownerId &&
             block.attachmentType === "condition" && block.attachmentField === "conditionBlock"
@@ -394,7 +394,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         setBlocks(current => {
           const child = allBlocks(current).find(block => drag.ids.includes(block.id));
           if (!child || !["add","compare","true","false","get"].includes(child.kind) || !targetId || (field !== "valueBlock" && field !== "rightBlock")) return current;
-          return putValue(removeIds(current,drag.ids),targetId,field,child);
+          return putValue(current,targetId,field,child);
         });
         drag.ids.forEach(id => delete next[id]);
         setSelected(drag.ids.slice(0,1));
@@ -403,7 +403,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         setBlocks(current => {
           const child = allBlocks(current).find(block => drag.ids.includes(block.id));
           if (!child || (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare")) return current;
-          return putCondition(removeIds(current,drag.ids),targetId,child);
+          return putCondition(current,targetId,child);
         });
         drag.ids.forEach(id => delete next[id]);
         setSelected(drag.ids.slice(0,1));
@@ -575,8 +575,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     if (child.kind !== "true" && child.kind !== "false" && child.kind !== "compare") return;
     setBlocks(current => {
       const source = allBlocks(current).find(b => b.id === child.id) ?? child;
-      const rest = movingIds.length ? removeIds(current,movingIds) : current;
-      return putCondition(rest,targetId,source);
+      return putCondition(current,targetId,source);
     });
     if (movingIds.length) setPositions(current => { const next = {...current}; movingIds.forEach(id => delete next[id]); return next; });
     setSelected([child.id]); setStatus("idle");
@@ -709,14 +708,29 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const x = Math.max(12, event.clientX - rect.left + canvas.scrollLeft - 10);
-      const y = Math.max(64, event.clientY - rect.top + canvas.scrollTop - 15);
-      setBlocks(current => current.map(block => drag.ids.includes(block.id)
-        ? { ...block, attachedTo: undefined, attachmentType: undefined, attachmentField: undefined }
-        : block));
+      const point = {
+        x: Math.max(12, event.clientX - rect.left + canvas.scrollLeft - 10),
+        y: Math.max(64, event.clientY - rect.top + canvas.scrollTop - 15),
+      };
+      // Socket reporters are separate graph nodes, not fields on the owner.
+      // Remove the old attachment and promote the same node to a free block.
+      setBlocks(current => {
+        const moving = allBlocks(current).filter(block => drag.ids.includes(block.id));
+        if (!moving.length) return current;
+        const rest = removeIds(current, drag.ids);
+        return [
+          ...rest,
+          ...moving.map(block => ({
+            ...block,
+            attachedTo: undefined,
+            attachmentType: undefined,
+            attachmentField: undefined,
+          })),
+        ];
+      });
       setPositions(current => {
         const next = { ...current };
-        drag.ids.forEach(id => { next[id] = { x, y }; });
+        drag.ids.forEach(id => { next[id] = point; });
         return next;
       });
       setSnapGhost(null);
@@ -936,7 +950,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
         const [ownerId,field]=valueTarget;
         const child=payload.source==="library"?createBlock(payload.kind):allBlocks(blocks).find(b=>payload.ids.includes(b.id));
         if(child&&ownerId&&(field==="valueBlock"||field==="rightBlock")&&["add","compare","true","false","get"].includes(child.kind)) {
-          setBlocks(current=>putValue(payload.source==="library"?current:removeIds(current,payload.ids),ownerId,field,child));
+          setBlocks(current=>putValue(current,ownerId,field,child));
           if (payload.source === "canvas") socketReporterDropHandled.current = true;
           if (payload.source === "canvas") setPositions(current => { const next = {...current}; payload.ids.forEach(id => delete next[id]); return next; });
           setSelected([child.id]);
