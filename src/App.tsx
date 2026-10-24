@@ -156,7 +156,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const libraryDragElementRef = useRef<HTMLElement | null>(null);
   const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
-  const socketPreviewSlotRef = useRef<{element: HTMLElement; width: string; minWidth: string; maxWidth: string; previewWidth: string | undefined} | null>(null);
+  const socketPreviewSlotRef = useRef<{element: HTMLElement; width: string; minWidth: string; maxWidth: string; boxSizing: string; previewWidth: string | undefined} | null>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const snapGhostRef = useRef<SnapGhost | null>(null);
@@ -418,7 +418,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const slotRect = slot.getBoundingClientRect(), sourceRect = element.getBoundingClientRect();
-            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
             slot.style.width = `${Math.max(slot.offsetWidth, element.getBoundingClientRect().width + 8)}px`;
@@ -880,7 +880,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     preview.element.style.maxWidth = preview.maxWidth;
     if (preview.previewWidth === undefined) delete preview.element.dataset.previewWidth;
     else preview.element.dataset.previewWidth = preview.previewWidth;
-    preview.element.style.boxSizing = "";
+    preview.element.style.boxSizing = preview.boxSizing;
     socketPreviewSlotRef.current = null;
   }
 
@@ -932,7 +932,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const rect = slot.getBoundingClientRect();
-            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
             slot.style.width = `${Math.max(slot.offsetWidth, source.getBoundingClientRect().width + 8)}px`;
@@ -956,7 +956,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const rect = slot.getBoundingClientRect();
-            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
             slot.style.width = `${Math.max(slot.offsetWidth, source.getBoundingClientRect().width + 8)}px`;
