@@ -156,7 +156,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const libraryDragElementRef = useRef<HTMLElement | null>(null);
   const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
-  const socketPreviewOwnerRef = useRef<{element: HTMLElement; width: string; minWidth: string; boxSizing: string} | null>(null);
+  const socketPreviewSlotRef = useRef<{element: HTMLElement; width: string; minWidth: string; maxWidth: string; previewWidth: string | undefined} | null>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
   const snapGhostRef = useRef<SnapGhost | null>(null);
@@ -279,7 +279,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       if (Math.hypot(dx, dy) > 3) blockDragMoved.current = true;
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
-      restoreSocketPreviewOwner();
+      restoreSocketPreviewSlot();
       drag.ids.forEach(id => { const element = canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
 
       const movingElement = drag.ids.length ? canvas.querySelector<HTMLElement>(`.block-card[data-block-id="${drag.ids[0]}"]`) : null;
@@ -418,10 +418,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const slotRect = slot.getBoundingClientRect(), sourceRect = element.getBoundingClientRect();
-            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
-            owner.style.boxSizing = "border-box";
-            owner.style.width = `${Math.max(owner.offsetWidth, slotRect.right - owner.getBoundingClientRect().left + element.offsetWidth + 16)}px`;
-            owner.style.minWidth = owner.style.width;
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            slot.dataset.previewWidth = "true";
+            slot.style.boxSizing = "border-box";
+            slot.style.width = `${Math.max(slot.offsetWidth, element.getBoundingClientRect().width + 8)}px`;
+            slot.style.minWidth = slot.style.width;
+            slot.style.maxWidth = "none";
             element.style.transform = `translate(${slotRect.left - sourceRect.left}px, ${slotRect.top - sourceRect.top}px)`;
           } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (ghost) {
@@ -440,7 +442,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       blockPointerDrag.current = null;
       const canvas = canvasRef.current;
       drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
-      restoreSocketPreviewOwner();
+      restoreSocketPreviewSlot();
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
       const dx = event.clientX - drag.startX;
@@ -870,13 +872,16 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     setPositions(next);
     setStatus("idle");
   }
-  function restoreSocketPreviewOwner() {
-    const preview = socketPreviewOwnerRef.current;
+  function restoreSocketPreviewSlot() {
+    const preview = socketPreviewSlotRef.current;
     if (!preview) return;
     preview.element.style.width = preview.width;
     preview.element.style.minWidth = preview.minWidth;
-    preview.element.style.boxSizing = preview.boxSizing;
-    socketPreviewOwnerRef.current = null;
+    preview.element.style.maxWidth = preview.maxWidth;
+    if (preview.previewWidth === undefined) delete preview.element.dataset.previewWidth;
+    else preview.element.dataset.previewWidth = preview.previewWidth;
+    preview.element.style.boxSizing = "";
+    socketPreviewSlotRef.current = null;
   }
 
   function restoreLibraryDragElement() {
@@ -904,7 +909,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       element.style.willChange = "";
     });
     insertionPreviewElementsRef.current = [];
-    restoreSocketPreviewOwner();
+    restoreSocketPreviewSlot();
     const canvasRect = canvas.getBoundingClientRect();
     // The existing palette element is the preview; it is never cloned.
     const positionOriginalAt = (x: number, y: number) => {
@@ -927,10 +932,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const rect = slot.getBoundingClientRect();
-            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
-            owner.style.boxSizing = "border-box";
-            owner.style.width = `${Math.max(owner.offsetWidth, rect.right - owner.getBoundingClientRect().left + source.getBoundingClientRect().width + 16)}px`;
-            owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            slot.dataset.previewWidth = "true";
+            slot.style.boxSizing = "border-box";
+            slot.style.width = `${Math.max(slot.offsetWidth, source.getBoundingClientRect().width + 8)}px`;
+            slot.style.minWidth = slot.style.width;
+            slot.style.maxWidth = "none"; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
           }
         }
         
@@ -949,10 +956,12 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const rect = slot.getBoundingClientRect();
-            socketPreviewOwnerRef.current = {element:owner,width:owner.style.width,minWidth:owner.style.minWidth,boxSizing:owner.style.boxSizing};
-            owner.style.boxSizing = "border-box";
-            owner.style.width = `${Math.max(owner.offsetWidth, rect.right - owner.getBoundingClientRect().left + source.getBoundingClientRect().width + 16)}px`;
-            owner.style.minWidth = owner.style.width; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
+            socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,previewWidth:slot.dataset.previewWidth};
+            slot.dataset.previewWidth = "true";
+            slot.style.boxSizing = "border-box";
+            slot.style.width = `${Math.max(slot.offsetWidth, source.getBoundingClientRect().width + 8)}px`;
+            slot.style.minWidth = slot.style.width;
+            slot.style.maxWidth = "none"; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
           }
         }
         
@@ -1033,7 +1042,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       element.style.willChange = "";
     });
     insertionPreviewElementsRef.current = [];
-    restoreSocketPreviewOwner();
+    restoreSocketPreviewSlot();
     libraryDragKindRef.current = null;
     
     restoreLibraryDragElement();
@@ -1051,7 +1060,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const resolvedTargetId = explicitSocketTarget ?? (ghostTarget === "__free__" ? undefined : insertionTarget ?? socketTarget ?? targetId);
     libraryDragKindRef.current = null;
     
-    restoreSocketPreviewOwner();
+    restoreSocketPreviewSlot();
     restoreLibraryDragElement();
     const raw=event.dataTransfer.getData("application/x-blorrl"); if(!raw){snapGhostRef.current=null;return;}
     try {
