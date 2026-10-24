@@ -156,6 +156,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
   const libraryDragElementRef = useRef<HTMLElement | null>(null);
   const libraryDragOriginalStyleRef = useRef<string | null>(null);
   const libraryDragKindRef = useRef<BlockKind | null>(null);
+  const reporterDragOriginalStyleRef = useRef<{ element: HTMLElement; cssText: string } | null>(null);
   const socketPreviewSlotRef = useRef<{element: HTMLElement; width: string; minWidth: string; maxWidth: string; boxSizing: string; previewWidth: string | undefined} | null>(null);
   const insertionPreviewElementsRef = useRef<HTMLElement[]>([]);
   const [dragCanvasExtent, setDragCanvasExtent] = useState(0);
@@ -418,13 +419,17 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const slotRect = slot.getBoundingClientRect(), sourceRect = element.getBoundingClientRect();
+            const slotStyle = window.getComputedStyle(slot);
+            const insetX = slot.clientLeft + (Number.parseFloat(slotStyle.paddingLeft) || 0);
+            const targetX = slotRect.left + insetX;
+            const targetY = slotRect.top + (slotRect.height - sourceRect.height) / 2;
             socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
-            slot.style.width = `${Math.max(slot.offsetWidth, element.getBoundingClientRect().width + 8)}px`;
+            slot.style.width = `${Math.max(slot.offsetWidth, sourceRect.width + insetX + (Number.parseFloat(slotStyle.paddingRight) || 0))}px`;
             slot.style.minWidth = slot.style.width;
             slot.style.maxWidth = "none";
-            element.style.transform = `translate(${slotRect.left - sourceRect.left}px, ${slotRect.top - sourceRect.top}px)`;
+            element.style.transform = `translate(${targetX - sourceRect.left}px, ${targetY - sourceRect.top}px)`;
           } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (ghost) {
           element.style.transform = `translate(${ghost.x - element.offsetLeft}px, ${ghost.y + stackOffset - element.offsetTop}px)`;
@@ -442,6 +447,7 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
       blockPointerDrag.current = null;
       const canvas = canvasRef.current;
       drag.ids.forEach(id => { const element = canvas?.querySelector<HTMLElement>(`.block-card[data-block-id="${id}"]`); if (element) { element.style.transform = ""; element.style.opacity = ""; element.style.willChange = ""; } });
+      restoreReporterDragElement();
       restoreSocketPreviewSlot();
       insertionPreviewElementsRef.current.forEach(element => { element.style.transform = ""; element.style.willChange = ""; });
       insertionPreviewElementsRef.current = [];
@@ -574,6 +580,15 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     const source = event.currentTarget;
     const canvasRect = canvas.getBoundingClientRect();
     const sourceRect = source.getBoundingClientRect();
+    // A transform moves the reporter visually but leaves its old socket space
+    // reserved. Float the same DOM element during drag so the parent reflows
+    // immediately, then restore its exact inline styles before committing.
+    reporterDragOriginalStyleRef.current = { element: source, cssText: source.style.cssText };
+    source.style.position = "fixed";
+    source.style.left = `${sourceRect.left}px`;
+    source.style.top = `${sourceRect.top}px`;
+    source.style.zIndex = "1000";
+    source.style.margin = "0";
     const point = {
       x: sourceRect.left - canvasRect.left + canvas.scrollLeft,
       y: sourceRect.top - canvasRect.top + canvas.scrollTop,
@@ -872,6 +887,13 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
     setPositions(next);
     setStatus("idle");
   }
+  function restoreReporterDragElement() {
+    const drag = reporterDragOriginalStyleRef.current;
+    if (!drag) return;
+    drag.element.style.cssText = drag.cssText;
+    reporterDragOriginalStyleRef.current = null;
+  }
+
   function restoreSocketPreviewSlot() {
     const preview = socketPreviewSlotRef.current;
     if (!preview) return;
@@ -932,12 +954,17 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
             const rect = slot.getBoundingClientRect();
+            const sourceRect = source.getBoundingClientRect();
+            const slotStyle = window.getComputedStyle(slot);
+            const insetX = slot.clientLeft + (Number.parseFloat(slotStyle.paddingLeft) || 0);
+            const targetX = rect.left + insetX;
+            const targetY = rect.top + (rect.height - sourceRect.height) / 2;
             socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
-            slot.style.width = `${Math.max(slot.offsetWidth, source.getBoundingClientRect().width + 8)}px`;
+            slot.style.width = `${Math.max(slot.offsetWidth, sourceRect.width + insetX + (Number.parseFloat(slotStyle.paddingRight) || 0))}px`;
             slot.style.minWidth = slot.style.width;
-            slot.style.maxWidth = "none"; source.style.opacity = "1"; source.style.left = `${rect.left}px`; source.style.top = `${rect.top}px`;
+            slot.style.maxWidth = "none"; source.style.opacity = "1"; source.style.left = `${targetX}px`; source.style.top = `${targetY}px`;
           }
         }
         
