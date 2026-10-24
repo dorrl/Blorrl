@@ -421,14 +421,17 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
             const slotRect = slot.getBoundingClientRect(), sourceRect = element.getBoundingClientRect();
             const slotStyle = window.getComputedStyle(slot);
             const insetX = slot.clientLeft + (Number.parseFloat(slotStyle.paddingLeft) || 0);
-            const targetX = slotRect.left + insetX;
-            const targetY = slotRect.top + (slotRect.height - sourceRect.height) / 2;
             socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
             slot.style.width = `${Math.max(slot.offsetWidth, sourceRect.width + insetX + (Number.parseFloat(slotStyle.paddingRight) || 0))}px`;
             slot.style.minWidth = slot.style.width;
             slot.style.maxWidth = "none";
+            // Expanding the slot can move it with its parent's flex layout;
+            // measure again after sizing so the reporter lands on the final box.
+            const previewRect = slot.getBoundingClientRect();
+            const targetX = previewRect.left + insetX;
+            const targetY = previewRect.top + (previewRect.height - sourceRect.height) / 2;
             element.style.transform = `translate(${targetX - sourceRect.left}px, ${targetY - sourceRect.top}px)`;
           } else element.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (ghost) {
@@ -953,18 +956,19 @@ const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({
           const slot = Array.from(canvas.querySelectorAll<HTMLElement>(".value-slot[data-value-for][data-value-field]")).find(el => el.dataset.valueFor === ownerId && el.dataset.valueField === field);
           const owner = slot ? topLevelBlockContaining(canvas, slot) : null;
           if (slot && owner) {
-            const rect = slot.getBoundingClientRect();
             const sourceRect = source.getBoundingClientRect();
             const slotStyle = window.getComputedStyle(slot);
             const insetX = slot.clientLeft + (Number.parseFloat(slotStyle.paddingLeft) || 0);
-            const targetX = rect.left + insetX;
-            const targetY = rect.top + (rect.height - sourceRect.height) / 2;
             socketPreviewSlotRef.current = {element:slot,width:slot.style.width,minWidth:slot.style.minWidth,maxWidth:slot.style.maxWidth,boxSizing:slot.style.boxSizing,previewWidth:slot.dataset.previewWidth};
             slot.dataset.previewWidth = "true";
             slot.style.boxSizing = "border-box";
             slot.style.width = `${Math.max(slot.offsetWidth, sourceRect.width + insetX + (Number.parseFloat(slotStyle.paddingRight) || 0))}px`;
             slot.style.minWidth = slot.style.width;
-            slot.style.maxWidth = "none"; source.style.opacity = "1"; source.style.left = `${targetX}px`; source.style.top = `${targetY}px`;
+            slot.style.maxWidth = "none";
+            const previewRect = slot.getBoundingClientRect();
+            const targetX = previewRect.left + insetX;
+            const targetY = previewRect.top + (previewRect.height - sourceRect.height) / 2;
+            source.style.opacity = "1"; source.style.left = `${targetX}px`; source.style.top = `${targetY}px`;
           }
         }
         
