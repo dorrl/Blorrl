@@ -2430,3 +2430,30 @@ button:focus-visible,input:focus-visible,textarea:focus-visible {
 .block-card:not(.value-chip) .value-slot:has(> .value-chip) {
   margin-inline: 2px;
 }
+
+
+/* Size socket previews from the dragged block and propagate intrinsic width. */
+.block-card .value-slot[data-preview-width],
+.block-card .condition-slot[data-preview-width] {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.block-card:not(.value-chip) .block-content:has(.value-slot[data-preview-width]),
+.block-card:not(.value-chip) .block-content:has(.condition-slot[data-preview-width]) {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.block-card:not(.value-chip) .block-fields:has(.value-slot[data-preview-width]),
+.block-card:not(.value-chip) .block-fields:has(.condition-slot[data-preview-width]) {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  flex-wrap: nowrap;
+}
